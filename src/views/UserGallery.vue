@@ -26,7 +26,7 @@
         <div class="thumb-wrap">
           <img
             class="video-thumb"
-            :src="video.preview"
+            :src="previewUrl(video)"
             alt="Preview"
           />
         </div>
@@ -37,10 +37,14 @@
 
           <div class="video-actions">
             <button class="btn btn-primary" @click="goPlay(video)">▶ Play</button>
-
+          
             <a class="btn btn-secondary" :href="downloadUrl(video)" target="_blank">
               ⬇ Download
             </a>
+          
+            <button class="btn btn-danger" @click="confirmDelete(video)">
+              🗑 Delete
+            </button>
           </div>
         </div>
       </div>
@@ -69,8 +73,34 @@ async function loadVideos() {
   loading.value = false;
 }
 
+function previewUrl(video) {
+  if (!video.preview) return "";  
+
+  // absolute URL → return as-is
+  if (video.preview.startsWith("http")) return video.preview;
+
+  // ensure single `/`
+  return apiBase.replace(/\/+$/, "") + "/" + video.preview.replace(/^\/+/, "");
+}
+
 function downloadUrl(video) {
-  return `${apiBase}/media/download/${video.id}`;
+  if (!video.url) return "";
+
+  if (video.url.startsWith("http")) return video.url;
+
+  return apiBase.replace(/\/+$/, "") + "/" + video.url.replace(/^\/+/, "");
+}
+
+async function confirmDelete(video) {
+  if (!confirm(`Delete "${video.title}"? This cannot be undone.`)) return;
+
+  try {
+    await http.delete(`/media/${video.id}`);
+    await loadVideos(); // refresh list
+  } catch (err) {
+    alert("Delete failed.");
+    console.error(err);
+  }
 }
 
 const router = useRouter();
@@ -254,6 +284,15 @@ onMounted(loadVideos);
   background: linear-gradient(135deg, #304eff, #1526a3);
   transform: translateY(-2px);
   box-shadow: 0 6px 18px rgba(60, 90, 255, 0.65);
+}
+
+.btn-danger {
+  background: #8d1a1a;
+  color: #fff;
+  border: 1px solid #aa2b2b;
+}
+.btn-danger:hover {
+  background: #a32222;
 }
 
 </style>
