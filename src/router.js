@@ -6,6 +6,7 @@ import Login from './views/Login.vue'
 import Register from './views/Register.vue'
 import Dashboard from './views/Dashboard.vue'
 import UserGallery from './views/UserGallery.vue'
+import PlayerPage from './views/PlayerPage.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -22,9 +23,8 @@ const router = createRouter({
       path: '/dashboard',
       component: Dashboard,
       meta: { requiresAuth: true }
-    }
-    // optional: video player page
-    //{ path: "/player/:id", component: () => import("../pages/PlayerPage.vue") }
+    },
+    { name: 'player', path: '/player/:id', component: PlayerPage, props: true }
   ]
 })
 

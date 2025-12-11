@@ -17,3 +17,7 @@ Start web:
 ```bash
 npm run dev
 ```
+
+# Free HLS
+
+https://ottverse.com/free-hls-m3u8-test-urls/

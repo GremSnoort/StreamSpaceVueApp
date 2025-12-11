@@ -50,6 +50,7 @@
 
 <script setup>
 import { ref, onMounted } from "vue";
+import { useRouter } from "vue-router";
 import http from "../lib/http";
 
 const videos = ref([]);
@@ -72,8 +73,9 @@ function downloadUrl(video) {
   return `${apiBase}/media/download/${video.id}`;
 }
 
+const router = useRouter();
 function goPlay(video) {
-  window.location.href = `/player/${video.id}`;
+  router.push({ name: 'player', params: { id: video.id } });
 }
 
 function goUpload() {

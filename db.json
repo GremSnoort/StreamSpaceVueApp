@@ -4,19 +4,22 @@
             "id": "019b0f19-d0cc-7f21-bd01-2500f284bd16",
             "title": "Test Video #1",
             "description": "Video description",
-            "preview": "https://placehold.co/600x400?text=Preview"
+            "preview": "https://placehold.co/600x400?text=Preview",
+            "playUrl": "https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8"
         },
         {
             "id": "019b0f19-f21e-7ec0-92ab-447da9591f5e",
             "title": "Test Video #2",
             "description": "Video description",
-            "preview": "https://placehold.co/600x400?text=Preview"
+            "preview": "https://placehold.co/600x400?text=Preview",
+            "playUrl": "https://devstreaming-cdn.apple.com/videos/streaming/examples/img_bipbop_adv_example_fmp4/master.m3u8"
         },
         {
             "id": "019b0f1a-0378-7288-94ab-98d0019ab784",
             "title": "Test Video #3",
             "description": "Video description",
-            "preview": "https://placehold.co/600x400?text=Preview"
+            "preview": "https://placehold.co/600x400?text=Preview",
+            "playUrl": "https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8"
         }
     ]
 }
