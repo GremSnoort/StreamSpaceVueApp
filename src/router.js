@@ -11,27 +11,46 @@ import PlayerPage from './views/PlayerPage.vue'
 const router = createRouter({
   history: createWebHistory(),
   routes: [
-    { path: '/', component: Home },
-    { path: '/login', component: Login },
-    { path: '/register', component: Register },
+    { name: 'home', path: '/', component: Home },
+    { name: 'login', path: '/login', component: Login },
+    { name: 'register', path: '/register', component: Register },
     {
+      name: 'gallery',
       path: '/gallery',
       component: UserGallery,
       meta: { requiresAuth: true }
     },
     {
+      name: 'dashboard',
       path: '/dashboard',
       component: Dashboard,
       meta: { requiresAuth: true }
     },
-    { name: 'player', path: '/player/:id', component: PlayerPage, props: true }
+    { name: 'player',
+      path: '/player/:id',
+      component: PlayerPage,
+      props: true
+    }
   ]
 })
 
 router.beforeEach((to) => {
   const auth = useAuthStore()
   if (to.meta.requiresAuth && !auth.user) {
-    return '/login'
+    return { name: 'login' }
+  }
+})
+
+router.beforeEach(async (to) => {
+  const auth = useAuthStore();
+
+  // if user not loaded but cookie exists -> try restore session
+  if (!auth.user) {
+    await auth.tryRestoreSession?.();
+  }
+
+  if (to.meta.requiresAuth && !auth.user) {
+    return { name: 'login' };
   }
 })
 
