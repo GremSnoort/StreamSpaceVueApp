@@ -60,7 +60,7 @@ const apiBase = import.meta.env.VITE_API_BASE || "/api";
 
 async function loadVideos() {
   try {
-    const res = await http.get("/media");
+    const res = await http.get("/gallery");
     videos.value = Array.isArray(res.data) ? res.data : [];
   } catch (err) {
     console.error("Gallery load error:", err);
@@ -79,8 +79,7 @@ function goPlay(video) {
 }
 
 function goUpload() {
-  // If you have an upload page routed as /upload
-  window.location.href = "/upload";
+  router.push({ name: "upload" });
 }
 
 onMounted(loadVideos);
