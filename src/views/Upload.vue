@@ -86,7 +86,7 @@ async function upload() {
   formData.append("file", file.value);
 
   try {
-    await http.post("/upload/new", formData, {
+    await http.post("/media/upload", formData, {
       headers: { "Content-Type": "multipart/form-data" }
     });
 

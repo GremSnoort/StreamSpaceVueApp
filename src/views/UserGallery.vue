@@ -60,7 +60,7 @@ const apiBase = import.meta.env.VITE_API_BASE || "/api";
 
 async function loadVideos() {
   try {
-    const res = await http.get("/gallery");
+    const res = await http.get("/media");
     videos.value = Array.isArray(res.data) ? res.data : [];
   } catch (err) {
     console.error("Gallery load error:", err);

@@ -23,7 +23,7 @@ server.use(express.urlencoded({ extended: true }));
 server.use(middlewares);
 
 // Custom routes BEFORE json-server
-server.use("/upload", mediaRouter);
+server.use("/media", mediaRouter);
 
 // Static video files
 server.use("/videos", express.static("uploads/videos"));
