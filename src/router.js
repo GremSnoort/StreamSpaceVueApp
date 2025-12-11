@@ -34,18 +34,11 @@ const router = createRouter({
   ]
 })
 
-router.beforeEach((to) => {
-  const auth = useAuthStore()
-  if (to.meta.requiresAuth && !auth.user) {
-    return { name: 'login' }
-  }
-})
-
 router.beforeEach(async (to) => {
   const auth = useAuthStore();
 
   // if user not loaded but cookie exists -> try restore session
-  if (!auth.user) {
+  if (!auth.user && auth.token) {
     await auth.tryRestoreSession?.();
   }
 

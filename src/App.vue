@@ -1,6 +1,8 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { useAuthStore } from './stores/auth'
+
+const auth = useAuthStore()
 
 const menuOpen = ref(false)
 const hidden = ref(false)
@@ -12,6 +14,11 @@ function toggleMenu() {
 
 function closeMenu() {
   menuOpen.value = false
+}
+
+function logout() {
+  auth.logout()
+  closeMenu()
 }
 
 // SCROLL EVENT: hide on scroll down, show on scroll up
@@ -28,6 +35,9 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener('scroll', onScroll)
 })
+
+// CHECK AUTH STATE
+const isLoggedIn = computed(() => !!auth.user)
 </script>
 
 <template>
@@ -37,10 +47,53 @@ onUnmounted(() => {
 
       <!-- Links -->
       <div :class="['links', { open: menuOpen }]">
+
         <router-link @click="closeMenu" to="/" class="nav-link">Home</router-link>
-        <router-link @click="closeMenu" to="/dashboard" class="nav-link">Dashboard</router-link>
-        <router-link @click="closeMenu" to="/login" class="nav-link">Login</router-link>
-        <router-link @click="closeMenu" to="/register" class="nav-link">Register</router-link>
+
+        <router-link
+          v-if="isLoggedIn"
+          @click="closeMenu"
+          to="/gallery"
+          class="nav-link"
+        >
+          Gallery
+        </router-link>
+
+        <router-link
+          v-if="isLoggedIn"
+          @click="closeMenu"
+          to="/dashboard"
+          class="nav-link"
+        >
+          Dashboard
+        </router-link>
+
+        <router-link
+          v-if="!isLoggedIn"
+          @click="closeMenu"
+          to="/login"
+          class="nav-link"
+        >
+          Login
+        </router-link>
+
+        <router-link
+          v-if="!isLoggedIn"
+          @click="closeMenu"
+          to="/register"
+          class="nav-link"
+        >
+          Register
+        </router-link>
+
+        <button
+          v-if="isLoggedIn"
+          class="nav-link"
+          style="background:none;border:none;cursor:pointer"
+          @click="logout"
+        >
+          Logout
+        </button>
       </div>
 
       <!-- Hamburger -->
