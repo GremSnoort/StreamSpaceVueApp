@@ -8,6 +8,7 @@ import Dashboard from './views/Dashboard.vue'
 import UserGallery from './views/UserGallery.vue'
 import PlayerPage from './views/PlayerPage.vue'
 import Upload from './views/Upload.vue'
+import DashboardOverview from './views/dashboard/DashboardOverview.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -30,13 +31,20 @@ const router = createRouter({
       name: "upload",
       path: "/upload",
       component: Upload,
-      meta: { requiresAuth: true }   // ✅ add this
+      meta: { requiresAuth: true }
     },
     {
       name: 'dashboard',
       path: '/dashboard',
       component: Dashboard,
-      meta: { requiresAuth: true }
+      meta: { requiresAuth: true },
+      children: [
+        { path: '', redirect: '/dashboard/overview' },
+        { path: 'overview', component: () => DashboardOverview },
+        { path: 'videos', component: () => UserGallery },
+        { path: 'upload', component: () => Upload },
+        //{ path: 'profile', component: () => import('@/views/Profile.vue') }
+      ]
     }
   ]
 })
