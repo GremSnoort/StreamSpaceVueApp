@@ -7,6 +7,7 @@ import Register from './views/Register.vue'
 import Dashboard from './views/Dashboard.vue'
 import UserGallery from './views/UserGallery.vue'
 import PlayerPage from './views/PlayerPage.vue'
+import GalleryPage from './views/GalleryPage.vue'
 import Upload from './views/Upload.vue'
 import DashboardOverview from './views/dashboard/DashboardOverview.vue'
 
@@ -19,7 +20,7 @@ const router = createRouter({
     {
       name: 'gallery',
       path: '/gallery',
-      component: UserGallery,
+      component: GalleryPage,
       meta: { requiresAuth: true }
     },
     { name: 'player',

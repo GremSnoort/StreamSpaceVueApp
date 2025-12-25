@@ -141,6 +141,7 @@ async function upload() {
   background: #101010;
   color: white;
   font-size: 15px;
+  box-sizing: border-box;
 }
 
 .textarea {

@@ -28,6 +28,7 @@ server.use("/media", mediaRouter);
 // Static video files
 server.use("/videos", express.static("uploads/videos"));
 server.use("/previews", express.static("uploads/previews"));
+server.use("/hls", express.static("uploads/hls"));
 
 // json-server routes
 server.use(router);

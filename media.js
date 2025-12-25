@@ -6,15 +6,19 @@ const { exec } = require("child_process");
 
 const router = express.Router();
 
+const API_BASE = "http://localhost:3001"
+
 // -------------------------
 // Ensure upload dirs exist
 // -------------------------
 const videoDir = path.join(__dirname, "uploads/videos");
 const previewDir = path.join(__dirname, "uploads/previews");
+const hlsDir = path.join(__dirname, "uploads/hls");
 const dbFile = path.join(__dirname, "uploads/media.json");
 
 fs.mkdirSync(videoDir, { recursive: true });
 fs.mkdirSync(previewDir, { recursive: true });
+fs.mkdirSync(hlsDir, { recursive: true });
 
 if (!fs.existsSync(dbFile)) {
   fs.writeFileSync(dbFile, JSON.stringify([]));
@@ -49,27 +53,46 @@ router.post("/upload", upload.single("file"), (req, res) => {
 
   const { title, description } = req.body;
 
+  const id = Date.now().toString();
+
   const videoPath = req.file.path;
   const videoUrl = `/videos/${req.file.filename}`;
 
-  const previewFile = req.file.filename.replace(path.extname(req.file.filename), ".jpg");
+  // HLS output
+  const hlsOutputDir = path.join(hlsDir, id);
+  fs.mkdirSync(hlsOutputDir, { recursive: true });
+
+  const hlsPlaylist = path.join(hlsOutputDir, "master.m3u8");
+  const playUrl = `${API_BASE}/hls/${id}/master.m3u8`
+
+  // Thumbnail
+  const previewFile = `${id}.jpg`;
   const previewPath = path.join(previewDir, previewFile);
-  const previewUrl = `/previews/${previewFile}`;
+  const previewUrl = `${API_BASE}/previews/${previewFile}`
 
   // Generate thumbnail at 2-second mark
-  const ffmpegCmd = `ffmpeg -ss 2 -i "${videoPath}" -frames:v 1 -q:v 2 "${previewPath}" -y`;
+  const thumbnailCmd =
+    `ffmpeg -ss 2 -i "${videoPath}" -frames:v 1 -q:v 2 "${previewPath}" -y`;
 
-  exec(ffmpegCmd, (err) => {
+  const hlsCmd =
+    `ffmpeg -i "${videoPath}" \
+    -profile:v baseline -level 3.0 \
+    -start_number 0 \
+    -hls_time 6 -hls_list_size 0 \
+    -f hls "${hlsPlaylist}"`;
+
+  exec(`${thumbnailCmd} && ${hlsCmd}`, (err) => {
     if (err) {
-      console.error("Thumbnail generation failed:", err);
+      console.error("FFmpeg failed:", err);
+      return res.status(500).json({ error: "Processing failed" });
     }
 
     const entry = {
-      id: Date.now().toString(),
+      id,
       title,
       description,
-      url: videoUrl,
-      playUrl: videoUrl,
+      url: `${API_BASE}${videoUrl}`,
+      playUrl,
       preview: previewUrl,
       createdAt: new Date().toISOString()
     };
@@ -80,6 +103,22 @@ router.post("/upload", upload.single("file"), (req, res) => {
 
     res.json(entry);
   });
+});
+
+// -------------------------
+// Get single media by id
+// -------------------------
+router.get("/:id", (req, res) => {
+  const { id } = req.params
+  const db = loadDB()
+
+  const item = db.find(v => String(v.id) === String(id))
+
+  if (!item) {
+    return res.status(404).json({ error: "Media not found" })
+  }
+
+  res.json(item)
 });
 
 // -------------------------

@@ -44,22 +44,19 @@ const apiBase = import.meta.env.VITE_API_BASE || '/api'
 
 async function loadMedia() {
   loading.value = true
-  console.log("Try to load id: ", id)
   try {
-    console.log("Try to load id: ", id)
-    // 1) try single resource endpoint
+    // правильный источник данных
     const res = await http.get(`/media/${id}`)
-    // json-server returns object for /media/:id, or 404
     media.value = res.data || null
   } catch (err) {
-    console.error("Media load error:", err);
-    // 2) fallback: fetch list and find by id
+    console.error("Media load error:", err)
+
+    // fallback — список
     try {
       const resList = await http.get('/media')
       const arr = Array.isArray(resList.data) ? resList.data : []
       media.value = arr.find(i => String(i.id) === String(id)) || null
-    } catch (errList) {
-      console.error("Media load error:", errList);
+    } catch {
       media.value = null
     }
   } finally {
@@ -75,19 +72,21 @@ function onPlayerError(e){
   console.error('player error', e)
 }
 
-const downloadUrl = computed(() => media.value ? `${apiBase}/media/download/${media.value.id}` : '#')
+const downloadUrl = computed(() => media.value ? `${media.value.url}` : '#')
 
 onMounted(() => loadMedia())
 </script>
 
 <style scoped>
 .player-page {
-  max-width: 1000px;
+  width: 80%;
+  height: 100%;
   margin: 24px auto;
   padding: 18px;
   background: linear-gradient(145deg,#0d0d0f,#111);
   border-radius: 12px;
   color: #fff;
+  box-sizing: border-box;
 }
 
 .player-header {
@@ -117,7 +116,14 @@ onMounted(() => loadMedia())
 .player-body {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 14px;
+  gap: 20px;
+  box-sizing: border-box;
+}
+
+video {
+  width: 100%;
+  max-height: 70vh;
+  border-radius: 12px;
 }
 
 .meta {

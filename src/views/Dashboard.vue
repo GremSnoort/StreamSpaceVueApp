@@ -66,9 +66,18 @@ watch(
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap');
 
 .dashboard-page {
-  padding: 32px;
   flex: 1;
   overflow-y: auto;
+
+  display: flex;
+  justify-content: center;
+
+  padding: 32px 40px;
+}
+
+.dashboard-page > * {
+  width: 100%;
+  max-width: 1400px;
 }
 
 .dashboard-layout {
