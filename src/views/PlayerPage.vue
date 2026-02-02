@@ -72,7 +72,13 @@ function onPlayerError(e){
   console.error('player error', e)
 }
 
-const downloadUrl = computed(() => media.value ? `${media.value.url}` : '#')
+function absUrl(path) {
+  if (!path) return '#'
+  if (path.startsWith('http')) return path
+  return apiBase.replace(/\/+$/, '') + '/' + path.replace(/^\/+/, '')
+}
+
+const downloadUrl = computed(() => media.value ? absUrl(media.value.url) : '#')
 
 onMounted(() => loadMedia())
 </script>
