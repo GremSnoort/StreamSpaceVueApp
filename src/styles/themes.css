@@ -1,9 +1,31 @@
+/* =========================
+   OCEAN THEME (default)
+   ========================= */
+
 :root[data-theme="ocean"] {
   --primary: #4f8aff;
   --primary-2: #306dff;
+
+  --glass-1: rgba(10, 25, 45, 0.72);
+  --glass-2: rgba(5, 18, 32, 0.72);
+  --glass-border: rgba(79, 138, 255, 0.28);
+
+  --accent-1: rgba(0, 160, 255, 0.25);
+  --accent-2: rgba(120, 0, 255, 0.25);
 }
 
-:root[data-theme="red"] {
-  --primary: #ff4e4e;
-  --primary-2: #c82333;
+/* =========================
+   VIOLET THEME
+   ========================= */
+
+:root[data-theme="violet"] {
+  --primary: #a855f7;
+  --primary-2: #7c3aed;
+
+  --glass-1: rgba(32, 12, 48, 0.72);
+  --glass-2: rgba(18, 6, 28, 0.72);
+  --glass-border: rgba(168, 85, 247, 0.28);
+
+  --accent-1: rgba(168, 85, 247, 0.25);
+  --accent-2: rgba(0, 180, 255, 0.18);
 }

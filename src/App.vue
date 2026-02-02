@@ -1,8 +1,10 @@
 <script setup>
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useAuthStore } from './stores/auth'
+import { useTheme } from '@/composables/useTheme'
 
 const auth = useAuthStore()
+const { toggle, theme } = useTheme()
 
 const menuOpen = ref(false)
 const hidden = ref(false)
@@ -44,6 +46,10 @@ const isLoggedIn = computed(() => !!auth.user)
   <div>
     <nav :class="['navbar', { hidden }]">
       <div class="logo">StreamSpace</div>
+
+      <button class="btn btn-primary" @click="toggle">
+        🎨 {{ theme === 'ocean' ? 'Ocean' : 'Violet' }}
+      </button>
 
       <!-- Links -->
       <div :class="['links', { open: menuOpen }]">
