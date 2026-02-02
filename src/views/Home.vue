@@ -1,151 +1,178 @@
 <script setup>
+import PageLayout from '../components/PageLayout.vue'
+import homeCover from '@/assets/images/homeCover.png'
 </script>
 
 <template>
-  <div class="home-page">
-
-    <!-- Top collage image section -->
-    <section class="skin-section">
+  <div class="home">
+    <!-- COVER -->
+    <section class="cover">
       <img
-        src="https://wallpapers.com/your-cinema-collage-example.jpg"
+        :src="homeCover"
         alt="Movie scenes collage"
-        class="skin-image"
+        class="cover-img"
       />
-      <div class="overlay">
-        <h1 class="welcome-text">StreamSpace: Welcome to your Movies Vault</h1>
-        <p class="subtitle">Your way to store & share videos</p>
-      </div>
-    </section>
-
-    <!-- Content below -->
-    <section class="content-section">
-      <div class="card-container">
-        <div class="card">
-          <h3>Latest Releases</h3>
-          <p>Discover trending content and updates</p>
-        </div>
-        <div class="card">
-          <h3>Your own Movie Storage</h3>
-          <p>Store your videos privately or shared</p>
-        </div>
-        <div class="card">
-          <h3>Online or Transfer</h3>
-          <p>Watch online or download</p>
+      <div class="cover-overlay">
+        <div class="cover-inner">
+          <h1 class="cover-title">StreamSpace</h1>
+          <p class="cover-subtitle">Welcome to your Movies Vault — store & share videos</p>
         </div>
       </div>
     </section>
 
+    <!-- CONTENT -->
+    <PageLayout>
+      <section class="panel features">
+        <header class="features-header">
+          <h2 class="features-title">What you can do</h2>
+          <p class="features-desc">A quick overview of the core features.</p>
+        </header>
+
+        <div class="grid features-grid">
+          <div class="feature-card">
+            <h3>Latest Releases</h3>
+            <p>Discover trending content and updates</p>
+          </div>
+
+          <div class="feature-card">
+            <h3>Your own Movie Storage</h3>
+            <p>Store your videos privately or shared</p>
+          </div>
+
+          <div class="feature-card">
+            <h3>Online or Transfer</h3>
+            <p>Watch online or download</p>
+          </div>
+        </div>
+      </section>
+    </PageLayout>
   </div>
 </template>
 
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap');
-
-.home-page {
+/* wrapper */
+.home {
   width: 100%;
-  min-height: 100vh;
-  background: #0a0a0a;
-  font-family: 'Inter', sans-serif;
-  color: #ffffff;
 }
 
-/* Top collage section */
-.skin-section {
+/* cover */
+.cover {
   position: relative;
   width: 100%;
   height: 380px;
   overflow: hidden;
-  display: flex;
-  justify-content: center;
-  align-items: center;
+  border-bottom: 1px solid var(--border);
 }
 
-.skin-image {
+.cover-img {
   width: 100%;
   height: 100%;
   object-fit: cover;
   filter: brightness(0.55);
+  transform: scale(1.02);
 }
 
-.overlay {
+.cover-overlay {
   position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: radial-gradient(circle at 50% 40%, rgba(0, 140, 255, 0.18), transparent 55%);
+}
+
+.cover-inner {
   text-align: center;
-  padding: 1rem;
+  max-width: 980px;
 }
 
-.welcome-text {
-  font-size: 3rem;
-  font-weight: 700;
+.cover-title {
+  margin: 0 0 10px;
+  font-size: 52px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
   color: #44aaff;
-  text-shadow: 0 0 10px #00bfff, 0 0 20px #009dff;
+  text-shadow: 0 0 10px rgba(0, 191, 255, 0.35);
 }
 
-.subtitle {
-  font-size: 1.25rem;
-  color: #9fcff7;
-  text-shadow: 0 0 6px #00bfff;
+.cover-subtitle {
+  margin: 0;
+  font-size: 18px;
+  color: var(--muted);
+  text-shadow: 0 0 6px rgba(0, 191, 255, 0.25);
 }
 
-/* Content cards */
-.content-section {
-  width: 100%;
-  padding: 2rem 1rem;
-  display: flex;
-  justify-content: center;
+/* features section */
+.features {
+  padding: 28px;
+  margin-top: 28px;
 }
 
-.card-container {
-  display: flex;
-  gap: 1.5rem;
-  flex-wrap: wrap;
-  justify-content: center;
-  max-width: 1200px;
+.features-header {
+  margin-bottom: 18px;
 }
 
-.card {
-  background: #111;
-  border: 1px solid #0c4d8a;
-  border-radius: 12px;
-  padding: 1.5rem;
-  flex: 1 1 280px;
-  min-width: 280px;
-  box-shadow: 0 0 15px rgba(0, 140, 255, 0.3);
-  transition: transform 0.3s, box-shadow 0.3s;
+.features-title {
+  margin: 0 0 6px;
+  font-size: 22px;
+  font-weight: 700;
+  color: #cfe8ff;
 }
 
-.card:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 0 25px rgba(0, 180, 255, 0.5);
+.features-desc {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  opacity: 0.9;
 }
 
-.card h3 {
-  margin-bottom: 0.5rem;
-  color: #00bfff;
+.features-grid {
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 18px;
 }
 
-.card p {
-  color: #a0d4ff;
-  font-size: 0.95rem;
+.feature-card {
+  background: rgba(0, 0, 0, 0.18);
+  border: 1px solid rgba(30, 144, 255, 0.12);
+  border-radius: var(--r-md);
+  padding: 18px;
+  box-shadow: var(--shadow-blue);
+  transition: transform 0.25s, box-shadow 0.25s;
 }
 
-/* Responsive */
+.feature-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-blue-hover);
+}
+
+.feature-card h3 {
+  margin: 0 0 8px;
+  font-size: 16px;
+  color: #9fd4ff;
+}
+
+.feature-card p {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 14px;
+}
+
 @media (max-width: 768px) {
-  .welcome-text {
-    font-size: 2.2rem;
+  .cover {
+    height: 320px;
   }
-  .subtitle {
-    font-size: 1rem;
+
+  .cover-title {
+    font-size: 38px;
   }
-  .card-container {
-    gap: 1rem;
+
+  .cover-subtitle {
+    font-size: 15px;
+  }
+
+  .features {
+    padding: 20px;
+    margin-top: 20px;
   }
 }
 </style>

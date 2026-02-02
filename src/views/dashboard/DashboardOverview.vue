@@ -28,271 +28,222 @@ onMounted(async () => {
 })
 
 function addToFavourites(video) {
-  // пока просто добавляем локально
   if (!favourites.value.find(v => v.id === video.id)) {
     favourites.value.push(video)
   }
 }
 
 const favourites = ref([
-  {
-    id: 1,
-    title: 'My Travel Vlog',
-    thumbnail: 'https://placehold.co/320x180?text=Video+1'
-  },
-  {
-    id: 2,
-    title: 'Vue Upload Demo',
-    thumbnail: 'https://placehold.co/320x180?text=Video+2'
-  }
+  { id: 1, title: 'My Travel Vlog', thumbnail: 'https://placehold.co/320x180?text=Video+1' },
+  { id: 2, title: 'Vue Upload Demo', thumbnail: 'https://placehold.co/320x180?text=Video+2' }
 ])
 
 const recommendations = ref([
-  {
-    id: 101,
-    title: 'Top Vue Tips',
-    thumbnail: 'https://placehold.co/320x180?text=Recommended+1'
-  },
-  {
-    id: 102,
-    title: 'Express Upload Guide',
-    thumbnail: 'https://placehold.co/320x180?text=Recommended+2'
-  },
-  {
-    id: 103,
-    title: 'Streaming Architecture',
-    thumbnail: 'https://placehold.co/320x180?text=Recommended+3'
-  }
+  { id: 101, title: 'Top Vue Tips', thumbnail: 'https://placehold.co/320x180?text=Recommended+1' },
+  { id: 102, title: 'Express Upload Guide', thumbnail: 'https://placehold.co/320x180?text=Recommended+2' },
+  { id: 103, title: 'Streaming Architecture', thumbnail: 'https://placehold.co/320x180?text=Recommended+3' }
 ])
 </script>
 
 <template>
   <section class="overview">
     <header class="overview-header">
-      <h1>Dashboard</h1>
-      <p>Your content at a glance</p>
+      <h1 class="overview-title">Dashboard</h1>
+      <p class="overview-subtitle">Your content at a glance</p>
     </header>
 
-    <div class="stats-grid">
-      <div class="stat-card">
-        <span class="icon">🎞</span>
+    <!-- STATS -->
+    <div class="grid stats-grid">
+      <div class="panel stat-card">
+        <span class="stat-icon">🎞</span>
         <div>
-          <p class="label">Videos</p>
-          <p class="value">{{ stats.videos }}</p>
+          <p class="stat-label">Videos</p>
+          <p class="stat-value">{{ stats.videos }}</p>
         </div>
       </div>
 
-      <div class="stat-card">
-        <span class="icon">💾</span>
+      <div class="panel stat-card">
+        <span class="stat-icon">💾</span>
         <div>
-          <p class="label">Storage used</p>
-          <p class="value">{{ stats.storage }}</p>
+          <p class="stat-label">Storage used</p>
+          <p class="stat-value">{{ stats.storage }}</p>
         </div>
       </div>
 
-      <div class="stat-card">
-        <span class="icon">⏱</span>
+      <div class="panel stat-card">
+        <span class="stat-icon">⏱</span>
         <div>
-          <p class="label">Last upload</p>
-          <p class="value">{{ stats.lastUpload }}</p>
+          <p class="stat-label">Last upload</p>
+          <p class="stat-value">{{ stats.lastUpload }}</p>
         </div>
       </div>
     </div>
 
-    <!-- EXTRA SECTIONS -->
-    <div class="extras-grid">
-        <!-- FAVOURITES -->
-        <section class="extra-card">
-            <h3>⭐ Favourites</h3>
+    <!-- EXTRAS -->
+    <div class="grid extras-grid">
+      <!-- FAVOURITES -->
+      <section class="panel extra-card">
+        <h3 class="extra-title">⭐ Favourites</h3>
 
-            <div v-if="favourites.length" class="fav-grid">
-                <div
-                v-for="v in favourites"
-                :key="v.id"
-                class="fav-card"
-                >
-                <img :src="v.thumbnail" alt="thumbnail" />
-                <div class="fav-title">{{ v.title }}</div>
-                </div>
+        <div v-if="favourites.length" class="grid thumbs-grid">
+          <article v-for="v in favourites" :key="v.id" class="thumb-card">
+            <img class="thumb-img" :src="v.thumbnail" alt="thumbnail" loading="lazy" />
+            <div class="thumb-title" :title="v.title">{{ v.title }}</div>
+          </article>
+        </div>
+
+        <p v-else class="muted">No favourites yet</p>
+      </section>
+
+      <!-- RECOMMENDATIONS -->
+      <section class="panel extra-card">
+        <h3 class="extra-title">🔥 Recommendations</h3>
+
+        <div v-if="recommendations.length" class="grid thumbs-grid">
+          <article v-for="v in recommendations" :key="v.id" class="thumb-card">
+            <div class="thumb-wrap">
+              <img class="thumb-img" :src="v.thumbnail" alt="thumbnail" loading="lazy" />
+
+              <button
+                class="btn fav-btn"
+                type="button"
+                @click.stop="addToFavourites(v)"
+                title="Add to favourites"
+              >
+                ❤️
+              </button>
             </div>
 
-            <p v-else class="empty">No favourites yet</p>
-        </section>
+            <div class="thumb-title" :title="v.title">{{ v.title }}</div>
+          </article>
+        </div>
 
-
-        <!-- RECOMMENDATIONS -->
-        <section class="extra-card">
-            <h3>🔥 Recommendations</h3>
-
-            <div v-if="recommendations.length" class="fav-grid">
-                <div
-                v-for="v in recommendations"
-                :key="v.id"
-                class="fav-card"
-                >
-                <div class="thumb-wrapper">
-                    <img :src="v.thumbnail" alt="thumbnail" />
-
-                    <button
-                    class="fav-btn"
-                    @click.stop="addToFavourites(v)"
-                    title="Add to favourites"
-                    >
-                    ❤️
-                    </button>
-                </div>
-
-                <div class="fav-title">{{ v.title }}</div>
-                </div>
-
-            </div>
-
-            <p v-else class="empty">No recommendations yet</p>
-        </section>
-
+        <p v-else class="muted">No recommendations yet</p>
+      </section>
     </div>
   </section>
 </template>
 
 <style scoped>
+/* page-specific only */
+
 .overview {
-  padding: 32px;
+  padding: var(--space-6);
 }
 
-/* Header */
-.overview-header h1 {
+/* header */
+.overview-title {
+  margin: 0 0 6px;
   font-size: 28px;
-  font-weight: 600;
-  margin-bottom: 6px;
+  font-weight: 800;
+  color: #cfe8ff;
 }
 
-.overview-header p {
-  color: #8fbce6;
+.overview-subtitle {
+  margin: 0 0 var(--space-6);
+  color: var(--muted);
   font-size: 14px;
-  margin-bottom: 32px;
+  opacity: 0.9;
 }
 
-/* Grid */
+/* stats */
 .stats-grid {
-  display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 20px;
+  gap: 18px;
 }
 
-/* Card */
 .stat-card {
-  background: linear-gradient(135deg, #0f1b2a, #0b1622);
-  border: 1px solid #1c2a3a;
-  border-radius: 14px;
-  padding: 20px;
-
+  padding: 18px;
   display: flex;
   align-items: center;
-  gap: 16px;
-
-  box-shadow: 0 0 25px rgba(0, 140, 255, 0.08);
+  gap: 14px;
+  box-shadow: var(--shadow-blue);
   transition: transform 0.25s, box-shadow 0.25s;
 }
 
 .stat-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 0 35px rgba(0, 140, 255, 0.25);
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-blue-hover);
 }
 
-.icon {
-  font-size: 28px;
+.stat-icon {
+  font-size: 26px;
 }
 
-.label {
+.stat-label {
+  margin: 0 0 4px;
   font-size: 13px;
-  color: #8fbce6;
+  color: var(--muted);
+  opacity: 0.95;
 }
 
-.value {
+.stat-value {
+  margin: 0;
   font-size: 22px;
-  font-weight: 600;
-  color: #ffffff;
+  font-weight: 800;
+  color: var(--text);
 }
 
-/* EXTRA GRID */
+/* extras */
 .extras-grid {
-  margin-top: 40px;
-  display: grid;
+  margin-top: var(--space-7);
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 24px;
+  gap: 18px;
 }
 
-/* EXTRA CARD */
 .extra-card {
-  background: linear-gradient(135deg, #0f1b2a, #0b1622);
-  border: 1px solid #1c2a3a;
-  border-radius: 16px;
-  padding: 22px;
-
-  box-shadow: 0 0 25px rgba(0, 140, 255, 0.08);
+  padding: 20px;
+  box-shadow: var(--shadow-blue);
 }
 
-.extra-card h3 {
-  margin-bottom: 14px;
+.extra-title {
+  margin: 0 0 14px;
   font-size: 16px;
   color: #9fcff7;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-/* LIST */
-.extra-card ul {
-  list-style: none;
-  padding: 0;
+.muted {
   margin: 0;
-}
-
-.extra-card li {
-  padding: 8px 0;
   font-size: 14px;
-  border-bottom: 1px dashed #23384f;
+  opacity: 0.65;
 }
 
-.extra-card li:last-child {
-  border-bottom: none;
-}
-
-.empty {
-  font-size: 14px;
-  opacity: 0.6;
-}
-
-/* FAVOURITES GRID */
-.fav-grid {
-  display: grid;
+/* thumbs */
+.thumbs-grid {
   grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 16px;
+  gap: 14px;
 }
 
-/* CARD */
-.fav-card {
-  background: #0a1624;
-  border: 1px solid #1c2a3a;
-  border-radius: 12px;
+.thumb-card {
+  border-radius: var(--r-md);
   overflow: hidden;
-  cursor: pointer;
-
+  background: rgba(0, 0, 0, 0.18);
+  border: 1px solid rgba(30, 144, 255, 0.12);
   transition: transform 0.25s, box-shadow 0.25s;
+  cursor: pointer;
 }
 
-.fav-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 0 18px rgba(0, 140, 255, 0.35);
+.thumb-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-blue-hover);
 }
 
-/* THUMBNAIL */
-.fav-card img {
+.thumb-wrap {
+  position: relative;
+}
+
+.thumb-img {
   width: 100%;
   aspect-ratio: 16 / 9;
   object-fit: cover;
   display: block;
+  filter: brightness(0.9);
 }
 
-/* TITLE */
-.fav-title {
+.thumb-title {
   padding: 10px;
   font-size: 13px;
   color: #cfe8ff;
@@ -301,45 +252,25 @@ const recommendations = ref([
   text-overflow: ellipsis;
 }
 
-.extra-card h3 {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.thumb-wrapper {
-  position: relative;
-}
-
+/* fav button */
 .fav-btn {
   position: absolute;
   top: 8px;
   right: 8px;
-
-  background: rgba(0, 0, 0, 0.55);
-  border: none;
-  border-radius: 50%;
   width: 34px;
   height: 34px;
-
-  cursor: pointer;
-  font-size: 16px;
-  color: #ff6b6b;
-
-  display: flex;
-  align-items: center;
-  justify-content: center;
-
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.55);
+  display: grid;
+  place-items: center;
+  padding: 0;
   opacity: 0;
-  transition: opacity 0.25s, transform 0.25s;
+  transition: opacity 0.2s, transform 0.2s;
 }
 
-.fav-card:hover .fav-btn {
+.thumb-card:hover .fav-btn {
   opacity: 1;
-  transform: scale(1.05);
-}
-
-.fav-btn:hover {
-  background: rgba(255, 80, 80, 0.25);
+  transform: scale(1.06);
 }
 </style>

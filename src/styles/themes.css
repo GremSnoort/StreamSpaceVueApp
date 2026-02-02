@@ -1,0 +1,9 @@
+:root[data-theme="ocean"] {
+  --primary: #4f8aff;
+  --primary-2: #306dff;
+}
+
+:root[data-theme="red"] {
+  --primary: #ff4e4e;
+  --primary-2: #c82333;
+}

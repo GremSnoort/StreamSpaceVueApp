@@ -1,296 +1,218 @@
 <template>
-  <div class="gallery-wrapper">
+  <div class="page panel gallery">
+    <header class="gallery-header">
+      <h1 class="title">My Videos</h1>
 
-    <div class="header-bar">
-    <h1 class="page-title">My Videos</h1>
-
-    <button class="upload-btn" @click="goUpload">
+      <button class="btn btn-primary btn-lg" @click="goUpload">
         ⬆ Upload
-    </button>
-    </div>
+      </button>
+    </header>
 
-    <div v-if="loading" class="status-message">
+    <div v-if="loading" class="status">
       Loading your media…
     </div>
 
-    <div v-else-if="videos.length === 0" class="status-message empty">
+    <div v-else-if="videos.length === 0" class="status status-empty">
       No videos available.
     </div>
 
-    <div v-else class="video-grid">
-      <div
+    <div v-else class="grid gallery-grid">
+      <article
         v-for="video in videos"
         :key="video.id"
         class="video-card"
       >
-        <div class="thumb-wrap">
+        <button class="thumb" type="button" @click="goPlay(video)" title="Play">
           <img
-            class="video-thumb"
-            :src="previewUrl(video)"
+            class="thumb-img"
+            :src="absUrl(video.preview)"
             alt="Preview"
+            loading="lazy"
           />
-        </div>
+          <span class="thumb-play">▶</span>
+        </button>
 
-        <div class="video-info">
+        <div class="video-body">
           <h2 class="video-title">{{ video.title }}</h2>
-          <p class="video-description">{{ video.description }}</p>
+          <p class="video-desc">{{ video.description }}</p>
 
           <div class="video-actions">
             <button class="btn btn-primary" @click="goPlay(video)">▶ Play</button>
-          
-            <a class="btn btn-secondary" :href="downloadUrl(video)" target="_blank">
+
+            <a class="btn btn-secondary" :href="absUrl(video.url)" download>
               ⬇ Download
             </a>
-          
+
             <button class="btn btn-danger" @click="confirmDelete(video)">
               🗑 Delete
             </button>
           </div>
         </div>
-      </div>
+      </article>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from "vue";
-import { useRouter } from "vue-router";
-import http from "../lib/http";
+import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import http from '../lib/http'
 
-const videos = ref([]);
-const loading = ref(true);
+const videos = ref([])
+const loading = ref(true)
 
-const apiBase = import.meta.env.VITE_API_BASE || "/api";
+const apiBase = import.meta.env.VITE_API_BASE || '/api'
+
+function absUrl(path) {
+  if (!path) return ''
+  if (path.startsWith('http')) return path
+  return apiBase.replace(/\/+$/, '') + '/' + path.replace(/^\/+/, '')
+}
 
 async function loadVideos() {
+  loading.value = true
   try {
-    const res = await http.get("/media");
-    videos.value = Array.isArray(res.data) ? res.data : [];
+    const res = await http.get('/media')
+    videos.value = Array.isArray(res.data) ? res.data : []
   } catch (err) {
-    console.error("Gallery load error:", err);
-    videos.value = [];
+    console.error('Gallery load error:', err)
+    videos.value = []
+  } finally {
+    loading.value = false
   }
-  loading.value = false;
-}
-
-function previewUrl(video) {
-  if (!video.preview) return "";  
-
-  // absolute URL → return as-is
-  if (video.preview.startsWith("http")) return video.preview;
-
-  // ensure single `/`
-  return apiBase.replace(/\/+$/, "") + "/" + video.preview.replace(/^\/+/, "");
-}
-
-function downloadUrl(video) {
-  if (!video.url) return "";
-
-  if (video.url.startsWith("http")) return video.url;
-
-  return apiBase.replace(/\/+$/, "") + "/" + video.url.replace(/^\/+/, "");
 }
 
 async function confirmDelete(video) {
-  if (!confirm(`Delete "${video.title}"? This cannot be undone.`)) return;
+  if (!confirm(`Delete "${video.title}"? This cannot be undone.`)) return
 
   try {
-    await http.delete(`/media/${video.id}`);
-    await loadVideos(); // refresh list
+    await http.delete(`/media/${video.id}`)
+    await loadVideos()
   } catch (err) {
-    alert("Delete failed.");
-    console.error(err);
+    alert('Delete failed.')
+    console.error(err)
   }
 }
 
-const router = useRouter();
+const router = useRouter()
 function goPlay(video) {
-  router.push({ name: 'player', params: { id: video.id } });
+  router.push({ name: 'player', params: { id: video.id } })
 }
 
 function goUpload() {
-  router.push({ name: "upload" });
+  router.push({ name: 'upload' })
 }
 
-onMounted(loadVideos);
+onMounted(loadVideos)
 </script>
 
 <style scoped>
-/* page wrapper */
-.gallery-wrapper {
-  padding: 30px;
-  color: white;
+/* only page-specific styles remain (design system handles .page/.panel/.title/.btn/.grid) */
 
-  /* subtle top diagonal gradient */
-  background: linear-gradient(145deg, #0f0f0f 0%, #151515 40%, #0d0d0d 100%);
-  border-radius: 16px;
+.gallery {
+  padding: 28px;
 }
 
-/* page title */
-.page-title {
-  font-size: 34px;
-  font-weight: 700;
-  margin-bottom: 30px;
-
-  background: linear-gradient(to right, #6aa8ff, #b1d1ff);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-
-  text-shadow: 0px 0px 25px rgba(122, 165, 255, 0.28);
+.gallery-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-5);
 }
 
-/* loading + empty */
-.status-message {
+.status {
   text-align: center;
-  font-size: 18px;
-  color: #bbb;
-  padding: 20px 0;
+  font-size: 16px;
+  color: rgba(255, 255, 255, 0.75);
+  padding: var(--space-6) 0;
 }
-.status-message.empty {
-  opacity: 0.6;
+.status-empty {
+  opacity: 0.7;
 }
 
 /* grid */
-.video-grid {
-  display: grid;
-  gap: 28px;
+.gallery-grid {
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 22px;
 }
 
 /* card */
 .video-card {
-  background: linear-gradient(145deg, #1c1c1c, #1a1a1a);
-  border-radius: 14px;
+  background: linear-gradient(145deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
+  border: 1px solid rgba(30, 144, 255, 0.12);
+  border-radius: var(--r-lg);
   overflow: hidden;
-  padding-bottom: 12px;
-
-  border: 1px solid #292929;
-  box-shadow: 0 0 18px rgba(0, 0, 0, 0.45),
-              0 0 25px rgba(75, 115, 255, 0.09);
-
-  transition: transform 0.25s ease, box-shadow 0.25s ease;
+  box-shadow: var(--shadow-soft);
+  transition: transform 0.25s, box-shadow 0.25s;
 }
 
 .video-card:hover {
   transform: translateY(-4px);
-  box-shadow: 0 0 22px rgba(98, 142, 255, 0.20),
-              0 0 40px rgba(26, 78, 255, 0.14);
+  box-shadow: var(--shadow-blue-hover);
 }
 
 /* thumbnail */
-.thumb-wrap {
-  height: 170px;
-  overflow: hidden;
-  border-bottom: 1px solid #2d2d2d;
-}
-
-.video-thumb {
+.thumb {
   width: 100%;
-  height: 100%;
-  object-fit: cover;
-  transition: transform 0.4s ease;
-}
-.video-card:hover .video-thumb {
-  transform: scale(1.08);
+  border: 0;
+  padding: 0;
+  display: block;
+  background: #000;
+  cursor: pointer;
+  position: relative;
 }
 
-/* text area */
-.video-info {
-  padding: 14px 16px;
+.thumb-img {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  display: block;
+  filter: brightness(0.82);
+  transition: transform 0.35s, filter 0.35s;
+}
+
+.video-card:hover .thumb-img {
+  transform: scale(1.04);
+  filter: brightness(0.95);
+}
+
+.thumb-play {
+  position: absolute;
+  left: 14px;
+  bottom: 12px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 13px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(255,255,255,0.12);
+  backdrop-filter: blur(6px);
+}
+
+/* body */
+.video-body {
+  padding: 14px 16px 16px;
 }
 
 .video-title {
-  font-size: 19px;
-  font-weight: 600;
-  margin-bottom: 6px;
+  margin: 0 0 6px;
+  font-size: 18px;
+  font-weight: 700;
+  color: #fff;
 }
 
-.video-description {
-  color: #bbb;
+.video-desc {
+  margin: 0 0 14px;
   font-size: 14px;
-  margin-bottom: 14px;
+  color: rgba(255, 255, 255, 0.72);
   min-height: 40px;
 }
 
-/* buttons */
+/* actions */
 .video-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
 }
-
-.btn {
-  padding: 8px 14px;
-  font-size: 14px;
-  border-radius: 6px;
-  cursor: pointer;
-  border: none;
-  text-decoration: none;
-  transition: 0.25s;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.btn-primary {
-  background: linear-gradient(to right, #4f8aff, #306dff);
-  color: white;
-  box-shadow: 0 0 12px rgba(71, 125, 255, 0.35);
-}
-.btn-primary:hover {
-  background: linear-gradient(to right, #6aa4ff, #3a7aff);
-}
-
-.btn-secondary {
-  background: #2a2a2a;
-  color: #d6d6d6;
-  border: 1px solid #3a3a3a;
-}
-.btn-secondary:hover {
-  background: #353535;
-}
-
-.header-bar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;   /* 🔥 keeps title + button on same line */
-  gap: 20px;
-  margin-bottom: 22px;
-}
-
-.upload-btn {
-  padding: 12px 26px;
-  font-size: 18px;
-  font-weight: 700;
-
-  background: linear-gradient(135deg, #1e3cff, #0b1a88);
-  color: white;
-
-  border: none;
-  border-radius: 10px;
-
-  /* Glow */
-  box-shadow: 0 4px 14px rgba(40, 60, 255, 0.55);
-
-  cursor: pointer;
-  transition: 0.25s ease;
-
-  /* ensures alignment with title */
-  line-height: 1;
-}
-
-.upload-btn:hover {
-  background: linear-gradient(135deg, #304eff, #1526a3);
-  transform: translateY(-2px);
-  box-shadow: 0 6px 18px rgba(60, 90, 255, 0.65);
-}
-
-.btn-danger {
-  background: #8d1a1a;
-  color: #fff;
-  border: 1px solid #aa2b2b;
-}
-.btn-danger:hover {
-  background: #a32222;
-}
-
 </style>

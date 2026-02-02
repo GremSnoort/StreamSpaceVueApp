@@ -1,34 +1,55 @@
 <template>
-  <div class="upload-wrapper">
-    <h1 class="page-title">Upload New Video</h1>
+  <div class="page panel upload">
+    <header class="upload-header">
+      <h1 class="title">Upload New Video</h1>
+      <p class="upload-subtitle">Add a title, description and upload your file.</p>
+    </header>
 
-    <div class="form-box">
+    <form class="upload-form" @submit.prevent="upload">
       <!-- Title -->
-      <label class="label">Video Title</label>
-      <input
-        v-model="title"
-        placeholder="Enter a video title"
-        class="textfield"
-      />
+      <label class="field">
+        <span class="field-label">Video Title</span>
+        <input
+          v-model="title"
+          class="control"
+          type="text"
+          placeholder="Enter a video title"
+          autocomplete="off"
+        />
+      </label>
 
       <!-- Description -->
-      <label class="label">Description</label>
-      <textarea
-        v-model="description"
-        placeholder="Enter a short description"
-        class="textfield textarea"
-      ></textarea>
+      <label class="field">
+        <span class="field-label">Description</span>
+        <textarea
+          v-model="description"
+          class="control control-textarea"
+          placeholder="Enter a short description"
+        ></textarea>
+      </label>
 
-      <!-- Drag & Drop -->
-      <div
-        class="drop-zone"
+      <!-- Drop zone -->
+      <button
+        type="button"
+        class="drop"
+        :class="{ dragging }"
+        @click="openFileDialog"
         @dragover.prevent="dragging = true"
         @dragleave.prevent="dragging = false"
         @drop.prevent="handleDrop"
-        :class="{ dragging }"
       >
-        <p v-if="!file">Drop a video file here or click to choose…</p>
-        <p v-else>Selected: <strong>{{ file.name }}</strong></p>
+        <div class="drop-inner">
+          <div class="drop-icon">⬆</div>
+
+          <p v-if="!file" class="drop-text">
+            Drop a video file here or click to choose…
+          </p>
+          <p v-else class="drop-text">
+            Selected: <strong>{{ file.name }}</strong>
+          </p>
+
+          <p class="drop-hint">Supported: MP4 / HLS source files (video/*)</p>
+        </div>
 
         <input
           ref="fileInput"
@@ -37,158 +58,197 @@
           class="hidden-input"
           @change="handleFileSelect"
         />
-      </div>
-
-      <!-- Upload Button -->
-      <button class="upload-btn" :disabled="!file || uploading" @click="upload">
-        {{ uploading ? "Uploading…" : "Upload" }}
       </button>
-    </div>
+
+      <!-- Actions -->
+      <div class="actions">
+        <button class="btn btn-primary btn-lg" type="submit" :disabled="!file || uploading">
+          {{ uploading ? "Uploading…" : "Upload" }}
+        </button>
+
+        <button class="btn btn-secondary btn-lg" type="button" @click="goGallery">
+          ← Back to Gallery
+        </button>
+      </div>
+    </form>
   </div>
 </template>
 
 <script setup>
-import { ref } from "vue";
-import http from "../lib/http";
-import { useRouter } from "vue-router";
+import { ref } from "vue"
+import http from "../lib/http"
+import { useRouter } from "vue-router"
 
-const title = ref("");
-const description = ref("");
-const file = ref(null);
-const dragging = ref(false);
-const uploading = ref(false);
+const title = ref("")
+const description = ref("")
+const file = ref(null)
+const dragging = ref(false)
+const uploading = ref(false)
 
-const fileInput = ref(null);
-const router = useRouter();
+const fileInput = ref(null)
+const router = useRouter()
 
 function handleFileSelect(e) {
-  file.value = e.target.files[0];
+  file.value = e.target.files?.[0] || null
 }
 
 function handleDrop(e) {
-  dragging.value = false;
-  const dropped = e.dataTransfer.files[0];
-  if (dropped) file.value = dropped;
+  dragging.value = false
+  const dropped = e.dataTransfer.files?.[0]
+  if (dropped) file.value = dropped
 }
 
 function openFileDialog() {
-  fileInput.value?.click();
+  fileInput.value?.click()
+}
+
+function goGallery() {
+  router.push({ name: "gallery" })
 }
 
 async function upload() {
-  if (!file.value) return;
+  if (!file.value || uploading.value) return
 
-  uploading.value = true;
-  const formData = new FormData();
-
-  formData.append("title", title.value);
-  formData.append("description", description.value);
-  formData.append("file", file.value);
+  uploading.value = true
+  const formData = new FormData()
+  formData.append("title", title.value)
+  formData.append("description", description.value)
+  formData.append("file", file.value)
 
   try {
     await http.post("/media/upload", formData, {
       headers: { "Content-Type": "multipart/form-data" }
-    });
-
-    router.push({ name: "gallery" });
+    })
+    router.push({ name: "gallery" })
   } catch (err) {
-    console.error("Upload failed:", err);
-    alert("Upload failed!");
+    console.error("Upload failed:", err)
+    alert("Upload failed!")
+  } finally {
+    uploading.value = false
   }
-
-  uploading.value = false;
 }
 </script>
 
 <style scoped>
-.upload-wrapper {
-  max-width: 700px;
-  margin: 0 auto;
-  padding: 30px;
-  color: white;
-  background: linear-gradient(145deg, #0f0f0f, #151515);
-  border-radius: 18px;
+/* page-specific only */
+
+.upload {
+  padding: 28px;
+  max-width: 900px;
 }
 
-.page-title {
-  font-size: 34px;
-  font-weight: 800;
-  margin-bottom: 25px;
-  text-align: center;
-
-  background: linear-gradient(to right, #6aa8ff, #b1d1ff);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+/* header */
+.upload-header {
+  margin-bottom: var(--space-5);
 }
 
-.form-box {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
+.upload-subtitle {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+  opacity: 0.9;
 }
 
-.label {
-  font-size: 15px;
-  font-weight: 600;
+/* form */
+.upload-form {
+  display: grid;
+  gap: var(--space-4);
+}
+
+/* fields */
+.field {
+  display: grid;
+  gap: 8px;
+}
+
+.field-label {
+  font-size: 14px;
+  font-weight: 700;
   color: #9bc6ff;
 }
 
-.textfield {
+.control {
   width: 100%;
   padding: 12px 14px;
-  border-radius: 10px;
-  border: 1px solid #2f2f2f;
-  background: #101010;
-  color: white;
+  border-radius: var(--r-md);
+  border: 1px solid rgba(30, 144, 255, 0.18);
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
   font-size: 15px;
-  box-sizing: border-box;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
 }
 
-.textarea {
-  min-height: 90px;
+.control:focus {
+  border-color: rgba(79, 138, 255, 0.85);
+  box-shadow: 0 0 0 3px rgba(79, 138, 255, 0.18);
+}
+
+.control-textarea {
+  min-height: 96px;
   resize: vertical;
 }
 
-.drop-zone {
-  border: 2px dashed #2d4da8;
-  border-radius: 12px;
-  padding: 45px 20px;
-  text-align: center;
+/* drop zone */
+.drop {
+  border: 2px dashed rgba(79, 138, 255, 0.45);
+  border-radius: var(--r-lg);
+  background: rgba(0, 0, 0, 0.25);
+  padding: 28px;
   cursor: pointer;
-  transition: 0.25s;
-  background: #111;
-  color: #c7d8ff;
+  text-align: center;
+  transition: 0.2s;
 }
 
-.drop-zone.dragging {
-  border-color: #5a86ff;
-  background: rgba(35, 72, 255, 0.15);
+.drop.dragging {
+  border-color: rgba(79, 138, 255, 0.95);
+  background: rgba(79, 138, 255, 0.12);
+}
+
+.drop-inner {
+  display: grid;
+  gap: 10px;
+  place-items: center;
+}
+
+.drop-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: rgba(79, 138, 255, 0.15);
+  border: 1px solid rgba(79, 138, 255, 0.25);
+  color: #cfe8ff;
+  font-weight: 800;
+}
+
+.drop-text {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.drop-hint {
+  margin: 0;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.55);
 }
 
 .hidden-input {
   display: none;
 }
 
-.upload-btn {
-  padding: 14px 0;
-  font-size: 18px;
+/* actions */
+.actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: var(--space-2);
+}
+
+.btn-lg {
+  padding: 12px 18px;
+  border-radius: var(--r-md);
   font-weight: 700;
-  border: none;
-  border-radius: 12px;
-  color: white;
-  background: linear-gradient(135deg, #1e3cff, #0b1a88);
-  cursor: pointer;
-  box-shadow: 0 6px 16px rgba(40, 60, 255, 0.55);
-  transition: 0.25s;
-}
-
-.upload-btn:hover:not(:disabled) {
-  transform: translateY(-2px);
-  background: linear-gradient(135deg, #304eff, #1627a3);
-}
-
-.upload-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 </style>

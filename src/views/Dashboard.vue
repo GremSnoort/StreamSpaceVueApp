@@ -21,41 +21,44 @@ watch(
 </script>
 
 <template>
-  <div class="dashboard-layout">
+  <div class="dash">
     <!-- Sidebar -->
-    <aside class="sidebar">
-      <nav class="menu">
-        <h2 class="logo">StreamSpace</h2>
-        <RouterLink to="/dashboard/overview" class="menu-link" active-class="active">
+    <aside class="dash-sidebar">
+      <nav class="dash-menu">
+        <h2 class="dash-logo">StreamSpace</h2>
+
+        <RouterLink to="/dashboard/overview" class="dash-link" active-class="is-active">
           📊 Overview
         </RouterLink>
 
-        <RouterLink to="/dashboard/videos" class="menu-link" active-class="active">
+        <RouterLink to="/dashboard/videos" class="dash-link" active-class="is-active">
           🎞 My Videos
         </RouterLink>
 
-        <RouterLink to="/dashboard/upload" class="menu-link" active-class="active">
+        <RouterLink to="/dashboard/upload" class="dash-link" active-class="is-active">
           ⬆ Upload
         </RouterLink>
 
-        <RouterLink to="/dashboard/profile" class="menu-link" active-class="active">
+        <RouterLink to="/dashboard/profile" class="dash-link" active-class="is-active">
           👤 Profile
         </RouterLink>
       </nav>
 
-      <!-- отдельный footer -->
-      <div class="sidebar-footer">
-        <button class="logout" @click="logout">Logout</button>
+      <div class="dash-footer">
+        <button class="btn btn-secondary btn-wide" @click="logout">
+          Logout
+        </button>
       </div>
     </aside>
 
     <!-- Content -->
-    <main class="content">
-      <header class="topbar" v-if="auth.user">
-        Logged in as <span>{{ auth.user.email }}</span>
+    <main class="dash-content">
+      <header v-if="auth.user" class="dash-topbar">
+        Logged in as <span class="dash-user">{{ auth.user.email }}</span>
       </header>
 
-      <section class="dashboard-page">
+      <!-- центрируем как PageLayout, но внутри dashboard -->
+      <section class="page dash-page">
         <RouterView />
       </section>
     </main>
@@ -63,130 +66,118 @@ watch(
 </template>
 
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap');
-
-.dashboard-page {
-  flex: 1;
-  overflow-y: auto;
-
+/* layout */
+.dash {
+  min-height: calc(100vh - 80px); /* navbar fixed */
   display: flex;
-  justify-content: center;
-
-  padding: 32px 40px;
-}
-
-.dashboard-page > * {
   width: 100%;
-  max-width: 1400px;
 }
 
-.dashboard-layout {
-  display: flex;
-  background: #0a0a0a;
-  color: white;
-  font-family: Inter, sans-serif;
-  flex: 1;
-}
-
-.sidebar {
+/* sidebar */
+.dash-sidebar {
   width: 240px;
-  background: #111;
-  padding: 30px 20px;
-  border-right: 1px solid #1e1e1e;
-
-  display: flex;
-  flex-direction: column;
   flex-shrink: 0;
+  border-right: 1px solid var(--border);
+  background: linear-gradient(145deg, var(--panel), var(--panel-2));
+  padding: var(--space-6) var(--space-5);
+  display: flex;
+  flex-direction: column;
 }
 
-/* Footer */
-.sidebar-footer {
-  margin-top: auto;
-  padding-top: 24px;
-  border-top: 1px dashed #222;
-  opacity: 0.85;
+.dash-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
-.logo::before {
-  content: '▶';
-  margin-right: 6px;
-}
-
-.logo {
+.dash-logo {
+  margin: 0 0 var(--space-5);
+  font-size: 20px;
+  font-weight: 700;
   color: #44aaff;
-  font-size: 22px;
-  font-weight: 400;
-  letter-spacing: 0.5px;
-  margin-bottom: 30px;
+  letter-spacing: 0.4px;
 }
 
-/* Logout */
-.logout {
-  width: 100%;
-  padding: 12px;
-  border: 1px solid #ff4e4e;
-  background: transparent;
-  color: #ff6c6c;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: 0.25s;
+.dash-logo::before {
+  content: '▶';
+  margin-right: 8px;
+  opacity: 0.9;
 }
 
-.logout:hover {
-  background: rgba(255, 78, 78, 0.12);
-  box-shadow: 0 0 12px rgba(255, 80, 80, 0.5);
-}
-
-.content {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-}
-
-.topbar {
-  padding: 18px 26px;
-  border-bottom: 1px solid #1e1e1e;
-  color: #9fcff7;
-}
-
-.menu {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-
-  overflow-y: auto;
-  padding-right: 4px;
-}
-
-.menu-link {
-  color: #bcdfff;
-  text-decoration: none;
-  padding: 10px;
-  border-radius: 8px;
-  transition: 0.25s;
+.dash-link {
   position: relative;
+  text-decoration: none;
+  color: #bcdfff;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  transition: 0.2s;
 }
 
-.menu-link.active::before {
-  content: '';
-  position: absolute;
-  left: -6px;
-  top: 0;
-  bottom: 0;
-  width: 4px;
-  background: #1e90ff;
-  border-radius: 4px;
-}
-
-.menu-link.active {
-  background: linear-gradient(135deg, #1e90ff, #1450aa);
-  color: #fff;
-  box-shadow: 0 0 12px rgba(80, 150, 255, 0.4);
-  transform: none;
-}
-
-.menu-link:hover {
+.dash-link:hover {
   background: rgba(30, 144, 255, 0.12);
 }
 
+.dash-link.is-active {
+  background: linear-gradient(135deg, rgba(79, 138, 255, 0.9), rgba(48, 109, 255, 0.65));
+  color: #fff;
+  box-shadow: var(--shadow-blue);
+}
+
+.dash-link.is-active::before {
+  content: '';
+  position: absolute;
+  left: -10px;
+  top: 8px;
+  bottom: 8px;
+  width: 4px;
+  border-radius: 4px;
+  background: rgba(79, 138, 255, 0.9);
+}
+
+/* footer */
+.dash-footer {
+  margin-top: auto;
+  padding-top: var(--space-5);
+  border-top: 1px dashed rgba(255, 255, 255, 0.10);
+}
+
+/* content */
+.dash-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.dash-topbar {
+  padding: 16px 22px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+}
+
+.dash-user {
+  font-weight: 700;
+  color: #cfe8ff;
+}
+
+/* center page content */
+.dash-page {
+  padding-top: var(--space-6);
+  padding-bottom: var(--space-6);
+}
+
+/* responsive: sidebar goes top */
+@media (max-width: 900px) {
+  .dash {
+    flex-direction: column;
+  }
+  .dash-sidebar {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+  .dash-link.is-active::before {
+    left: 0;
+  }
+}
 </style>

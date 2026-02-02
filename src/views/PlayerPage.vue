@@ -1,28 +1,41 @@
 <template>
-  <div class="player-page">
-    <div class="player-header">
-      <button class="back-btn" @click="goBack">← Back</button>
+  <div class="page panel player">
+    <header class="player-header">
+      <button class="btn btn-secondary" type="button" @click="goBack">
+        ← Back
+      </button>
+
       <h1 class="player-title">{{ media?.title || 'Playing' }}</h1>
+    </header>
+
+    <div v-if="loading" class="status">
+      Loading media…
     </div>
 
-    <div v-if="loading" class="player-loading">Loading media…</div>
+    <div v-else-if="!media" class="status status-empty">
+      Media not found.
+    </div>
 
-    <div v-else-if="!media" class="player-error">Media not found.</div>
-
-    <div v-else class="player-body">
+    <div v-else class="grid player-grid">
       <VideoPlayer
-        :src="media.playUrl"
-        :poster="media.preview"
+        :src="absUrl(media.playUrl)"
+        :poster="absUrl(media.preview)"
         :autoplay="true"
         :muted="false"
         @error="onPlayerError"
       />
 
-      <div class="meta">
-        <h2>{{ media.title }}</h2>
-        <p class="desc">{{ media.description }}</p>
-        <a :href="downloadUrl" class="download-link" target="_blank">⬇ Download</a>
-      </div>
+      <section class="meta">
+        <h2 class="meta-title">{{ media.title }}</h2>
+        <p class="meta-desc">{{ media.description }}</p>
+
+        <div class="meta-actions">
+          <!-- download: лучше без target=_blank, иначе download может игнорироваться -->
+          <a class="btn btn-secondary" :href="downloadUrl" download>
+            ⬇ Download
+          </a>
+        </div>
+      </section>
     </div>
   </div>
 </template>
@@ -42,14 +55,19 @@ const loading = ref(true)
 
 const apiBase = import.meta.env.VITE_API_BASE || '/api'
 
+function absUrl(path) {
+  if (!path) return ''
+  if (path.startsWith('http')) return path
+  return apiBase.replace(/\/+$/, '') + '/' + path.replace(/^\/+/, '')
+}
+
 async function loadMedia() {
   loading.value = true
   try {
-    // правильный источник данных
     const res = await http.get(`/media/${id}`)
     media.value = res.data || null
   } catch (err) {
-    console.error("Media load error:", err)
+    console.error('Media load error:', err)
 
     // fallback — список
     try {
@@ -68,86 +86,77 @@ function goBack() {
   router.back()
 }
 
-function onPlayerError(e){
+function onPlayerError(e) {
   console.error('player error', e)
 }
 
-function absUrl(path) {
-  if (!path) return '#'
-  if (path.startsWith('http')) return path
-  return apiBase.replace(/\/+$/, '') + '/' + path.replace(/^\/+/, '')
-}
+const downloadUrl = computed(() => (media.value ? absUrl(media.value.url) : ''))
 
-const downloadUrl = computed(() => media.value ? absUrl(media.value.url) : '#')
-
-onMounted(() => loadMedia())
+onMounted(loadMedia)
 </script>
 
 <style scoped>
-.player-page {
-  width: 80%;
-  height: 100%;
-  margin: 24px auto;
-  padding: 18px;
-  background: linear-gradient(145deg,#0d0d0f,#111);
-  border-radius: 12px;
-  color: #fff;
-  box-sizing: border-box;
+/* page-specific only */
+
+.player {
+  padding: 28px;
 }
 
 .player-header {
-  display:flex;
-  align-items:center;
-  gap: 14px;
-  margin-bottom: 14px;
-}
-
-.back-btn {
-  background: transparent;
-  color: #bfe1ff;
-  border: 1px solid rgba(120,170,255,0.15);
-  padding: 8px 12px;
-  border-radius: 8px;
-  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  margin-bottom: var(--space-5);
 }
 
 .player-title {
-  font-size: 20px;
-  font-weight: 700;
-  background: linear-gradient(90deg,#9ec7ff,#d8e9ff);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+  color: #cfe8ff;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.player-body {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 20px;
-  box-sizing: border-box;
+/* states */
+.status {
+  text-align: center;
+  font-size: 16px;
+  color: rgba(255, 255, 255, 0.75);
+  padding: var(--space-6) 0;
+}
+.status-empty {
+  opacity: 0.7;
 }
 
-video {
-  width: 100%;
-  max-height: 70vh;
-  border-radius: 12px;
+/* layout */
+.player-grid {
+  gap: 18px;
 }
 
+/* meta block */
 .meta {
-  padding: 8px 4px;
+  padding: 6px 2px;
 }
 
-.meta .desc {
-  color: #cfd9e6;
-  margin-top: 6px;
-}
-
-.download-link {
-  display:inline-block;
-  margin-top: 10px;
-  background: linear-gradient(90deg,#4f8aff,#306dff);
+.meta-title {
+  margin: 0 0 8px;
+  font-size: 18px;
+  font-weight: 800;
   color: #fff;
-  padding: 8px 12px;
-  border-radius: 8px;
-  text-decoration: none;
+}
+
+.meta-desc {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.72);
+  line-height: 1.45;
+}
+
+.meta-actions {
+  margin-top: 14px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 </style>
