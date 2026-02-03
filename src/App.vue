@@ -4,7 +4,10 @@ import { useAuthStore } from './stores/auth'
 import { useTheme } from '@/composables/useTheme'
 
 const auth = useAuthStore()
-const { toggle, theme } = useTheme()
+const { theme,
+    themes,
+    toggle,
+    setTheme } = useTheme()
 
 const menuOpen = ref(false)
 const hidden = ref(false)
@@ -48,7 +51,7 @@ const isLoggedIn = computed(() => !!auth.user)
       <div class="logo">StreamSpace</div>
 
       <button class="btn btn-primary" @click="toggle">
-        🎨 {{ theme === 'ocean' ? 'Ocean' : 'Violet' }}
+        🎨 {{ theme }}
       </button>
 
       <!-- Links -->
