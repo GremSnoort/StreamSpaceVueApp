@@ -415,3 +415,53 @@
     border-radius: 0;
   }
 }
+
+.theme-switch {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+
+  font-size: 0.95rem;
+  font-weight: 500;
+
+  color: var(--nav-link);
+  padding: 6px 10px;
+  border-radius: var(--r-sm);
+
+  transition:
+    color 0.25s ease,
+    background 0.25s ease;
+}
+
+.theme-switch:hover {
+  color: var(--nav-link-hover);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* подчёркивание — как у nav-link, но мягче */
+.theme-switch::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: 0;
+
+  width: 0%;
+  height: 2px;
+  border-radius: 2px;
+
+  background: linear-gradient(
+    90deg,
+    var(--nav-underline-1),
+    var(--nav-underline-2)
+  );
+
+  transition: width 0.3s ease;
+}
+
+.theme-switch:hover::after {
+  width: 100%;
+}

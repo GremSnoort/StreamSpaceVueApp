@@ -47,7 +47,10 @@ const isLoggedIn = computed(() => !!auth.user)
     <nav :class="['navbar', { hidden }]">
       <div class="logo">StreamSpace</div>
 
-      <button class="btn btn-primary" @click="toggle">
+      <button
+        class="nav-link theme-switch"
+        @click="toggle"
+      >
         🎨 {{ theme }}
       </button>
 
