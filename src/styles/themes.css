@@ -26,6 +26,8 @@
   --title-grad-2: #b1d1ff;
 
   --nav-bg: rgba(13, 13, 13, 0.86);
+
+  --auth-splash: url("/images/paint-splash-ocean.png");
 }
 
 /* =========================
@@ -56,6 +58,8 @@
   --title-grad-2: #93c5fd;
 
   --nav-bg: rgba(12, 6, 18, 0.86);
+
+  --auth-splash: url("/images/paint-splash-violet.png");
 }
 
 /* =========================
@@ -86,6 +90,8 @@
   --title-grad-2: #fdba74;
 
   --nav-bg: rgba(18, 8, 10, 0.86);
+
+  --auth-splash: url("/images/paint-splash-sunset.png");
 }
 
 /* =========================
@@ -116,6 +122,8 @@
   --title-grad-2: #a7f3d0;
 
   --nav-bg: rgba(7, 14, 12, 0.86);
+
+  --auth-splash: url("/images/paint-splash-emerald.png");
 }
 
 /* =========================
@@ -146,4 +154,6 @@
   --title-grad-2: #f472b6;
 
   --nav-bg: rgba(8, 10, 16, 0.86);
+
+  --auth-splash: url("/images/paint-splash-cyber.png");
 }

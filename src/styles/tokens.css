@@ -54,4 +54,7 @@
 
   --title-grad-1: #6aa8ff;
   --title-grad-2: #b1d1ff;
+
+  /* splash */
+  --auth-splash: url("/images/paint-splash.png");
 }

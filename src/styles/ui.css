@@ -218,8 +218,13 @@
   width: 310%;
   height: 310%;
 
-  background: url("/images/paint-splash.png") center / contain no-repeat;
+  background: var(--auth-splash) center / contain no-repeat;
   opacity: 0.7;
+  image-rendering: auto;
+  filter:
+    drop-shadow(0 0 28px rgba(0, 0, 0, 0.55))
+    saturate(1.1)
+    contrast(1.05);
 
   z-index: 0;
   pointer-events: none;

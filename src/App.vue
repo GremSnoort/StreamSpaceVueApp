@@ -4,10 +4,7 @@ import { useAuthStore } from './stores/auth'
 import { useTheme } from '@/composables/useTheme'
 
 const auth = useAuthStore()
-const { theme,
-    themes,
-    toggle,
-    setTheme } = useTheme()
+const { theme, toggle } = useTheme()
 
 const menuOpen = ref(false)
 const hidden = ref(false)
