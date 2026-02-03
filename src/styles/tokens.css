@@ -40,4 +40,18 @@
   --glass-1: rgba(17, 17, 17, 0.62);
   --glass-2: rgba(21, 21, 21, 0.48);
   --glass-border: rgba(30, 144, 255, 0.14);
+
+  /* navbar */
+  --nav-bg: rgba(13, 13, 13, 0.86);
+  --nav-border: rgba(79, 138, 255, 0.22);
+  --nav-shadow: 0 0 15px rgba(0, 140, 255, 0.2);
+
+  --nav-link: #9fd4ff;
+  --nav-link-hover: #ffffff;
+
+  --nav-underline-1: #00d4ff;
+  --nav-underline-2: #0066ff;
+
+  --title-grad-1: #6aa8ff;
+  --title-grad-2: #b1d1ff;
 }

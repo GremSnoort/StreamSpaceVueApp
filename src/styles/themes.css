@@ -12,6 +12,20 @@
 
   --accent-1: rgba(0, 160, 255, 0.25);
   --accent-2: rgba(120, 0, 255, 0.25);
+
+  /* nav links */
+  --nav-link: #9fd4ff;
+  --nav-link-hover: #ffffff;
+
+  --nav-underline-1: #00d4ff;
+  --nav-underline-2: #0066ff;
+  --nav-border: rgba(79, 138, 255, 0.22);
+  --nav-shadow: 0 0 15px rgba(0, 140, 255, 0.2);
+
+  --title-grad-1: #6aa8ff;
+  --title-grad-2: #b1d1ff;
+
+  --nav-bg: rgba(13, 13, 13, 0.86);
 }
 
 /* =========================
@@ -28,4 +42,18 @@
 
   --accent-1: rgba(168, 85, 247, 0.25);
   --accent-2: rgba(0, 180, 255, 0.18);
+
+  /* nav links */
+  --nav-link: #e9d5ff;
+  --nav-link-hover: #ffffff;
+
+  --nav-underline-1: #a855f7;
+  --nav-underline-2: #7c3aed;
+  --nav-border: rgba(168, 85, 247, 0.22);
+  --nav-shadow: 0 0 18px rgba(168, 85, 247, 0.18);
+
+  --title-grad-1: #c084fc;
+  --title-grad-2: #93c5fd;
+
+  --nav-bg: rgba(12, 6, 18, 0.86);
 }
