@@ -31,10 +31,25 @@
   --page-pad-x: 40px;
   --page-pad-y: 32px;
 
+  /* shadow color — будет переопределяться темами */
+  --shadow-color: rgba(0, 160, 255, 0.22);
+
   /* shadows */
-  --shadow-soft: 0 0 18px rgba(0,0,0,.45);
-  --shadow-blue: 0 0 25px rgba(0, 140, 255, 0.12);
-  --shadow-blue-hover: 0 0 35px rgba(0, 140, 255, 0.25);
+  --shadow-soft: 0 10px 30px rgba(0,0,0,.45);
+  --shadow-md: 0 4px 14px var(--shadow-color);
+  --shadow-lg: 0 8px 28px var(--shadow-color);
+
+  --glow: 0 0 12px var(--shadow-color);
+
+  /* ===== UI neutrals (вместо хардкода белых rgba) ===== */
+  --ui-fg-1: rgba(255,255,255,0.82);
+  --ui-fg-2: rgba(255,255,255,0.55);
+
+  --ui-surface-1: rgba(255,255,255,0.06);
+  --ui-border-1: rgba(255,255,255,0.10);
+
+  --ui-border-strong: rgba(255,255,255,0.28);
+  --ui-border-med: rgba(255,255,255,0.18);
 
   /* glass */
   --glass-1: rgba(17, 17, 17, 0.62);
@@ -44,7 +59,7 @@
   /* navbar */
   --nav-bg: rgba(13, 13, 13, 0.86);
   --nav-border: rgba(79, 138, 255, 0.22);
-  --nav-shadow: 0 0 15px rgba(0, 140, 255, 0.2);
+  --nav-shadow: var(--shadow-md);
 
   --nav-link: #9fd4ff;
   --nav-link-hover: #ffffff;

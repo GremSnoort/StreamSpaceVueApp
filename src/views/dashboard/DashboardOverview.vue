@@ -20,7 +20,6 @@ onMounted(async () => {
       stats.value.lastUpload = new Date(last.createdAt).toLocaleDateString()
     }
 
-    // Заглушка под будущее (когда появится backend-статистика)
     stats.value.storage = `${(media.length * 42).toFixed(1)} MB`
   } catch (e) {
     console.error('Failed to load dashboard stats', e)
@@ -125,8 +124,6 @@ const recommendations = ref([
 </template>
 
 <style scoped>
-/* page-specific only */
-
 .overview {
   padding: var(--space-6);
 }
@@ -136,7 +133,7 @@ const recommendations = ref([
   margin: 0 0 6px;
   font-size: 28px;
   font-weight: 800;
-  color: #cfe8ff;
+  color: var(--text);
 }
 
 .overview-subtitle {
@@ -157,13 +154,13 @@ const recommendations = ref([
   display: flex;
   align-items: center;
   gap: 14px;
-  box-shadow: var(--shadow-blue);
+  box-shadow: var(--shadow-md);
   transition: transform 0.25s, box-shadow 0.25s;
 }
 
 .stat-card:hover {
   transform: translateY(-3px);
-  box-shadow: var(--shadow-blue-hover);
+  box-shadow: var(--shadow-lg);
 }
 
 .stat-icon {
@@ -193,13 +190,13 @@ const recommendations = ref([
 
 .extra-card {
   padding: 20px;
-  box-shadow: var(--shadow-blue);
+  box-shadow: var(--shadow-md);
 }
 
 .extra-title {
   margin: 0 0 14px;
   font-size: 16px;
-  color: #9fcff7;
+  color: var(--nav-link);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -220,15 +217,15 @@ const recommendations = ref([
 .thumb-card {
   border-radius: var(--r-md);
   overflow: hidden;
-  background: rgba(0, 0, 0, 0.18);
-  border: 1px solid rgba(30, 144, 255, 0.12);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.10);
   transition: transform 0.25s, box-shadow 0.25s;
   cursor: pointer;
 }
 
 .thumb-card:hover {
   transform: translateY(-3px);
-  box-shadow: var(--shadow-blue-hover);
+  box-shadow: var(--shadow-lg);
 }
 
 .thumb-wrap {
@@ -246,7 +243,8 @@ const recommendations = ref([
 .thumb-title {
   padding: 10px;
   font-size: 13px;
-  color: #cfe8ff;
+  color: var(--text);
+  opacity: 0.92;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

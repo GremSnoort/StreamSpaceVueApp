@@ -149,7 +149,7 @@ onMounted(loadVideos)
 
 .video-card:hover {
   transform: translateY(-4px);
-  box-shadow: var(--shadow-blue-hover);
+  box-shadow: var(--shadow-lg);
 }
 
 /* thumbnail */

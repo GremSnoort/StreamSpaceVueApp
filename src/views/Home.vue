@@ -78,7 +78,10 @@ import homeCover from '@/assets/images/homeCover.png'
   display: grid;
   place-items: center;
   padding: 16px;
-  background: radial-gradient(circle at 50% 40%, rgba(0, 140, 255, 0.18), transparent 55%);
+
+  background:
+    radial-gradient(circle at 50% 40%, var(--accent-1), transparent 55%),
+    radial-gradient(circle at 70% 70%, var(--accent-2), transparent 60%);
 }
 
 .cover-inner {
@@ -91,15 +94,19 @@ import homeCover from '@/assets/images/homeCover.png'
   font-size: 52px;
   font-weight: 800;
   letter-spacing: 0.3px;
-  color: #44aaff;
-  text-shadow: 0 0 10px rgba(0, 191, 255, 0.35);
+
+  background: linear-gradient(to right, var(--title-grad-1), var(--title-grad-2));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+
+  text-shadow: 0 0 18px var(--shadow-color);
 }
 
 .cover-subtitle {
   margin: 0;
   font-size: 18px;
-  color: var(--muted);
-  text-shadow: 0 0 6px rgba(0, 191, 255, 0.25);
+  color: var(--ui-fg-1);
+  text-shadow: 0 0 10px rgba(0,0,0,0.35);
 }
 
 /* features section */
@@ -115,13 +122,13 @@ import homeCover from '@/assets/images/homeCover.png'
 .features-title {
   margin: 0 0 6px;
   font-size: 22px;
-  font-weight: 700;
-  color: #cfe8ff;
+  font-weight: 800;
+  color: var(--text);
 }
 
 .features-desc {
   margin: 0;
-  color: var(--muted);
+  color: var(--ui-fg-1);
   font-size: 14px;
   opacity: 0.9;
 }
@@ -132,28 +139,33 @@ import homeCover from '@/assets/images/homeCover.png'
 }
 
 .feature-card {
-  background: rgba(0, 0, 0, 0.18);
-  border: 1px solid rgba(30, 144, 255, 0.12);
+  background: linear-gradient(145deg, var(--glass-1), var(--glass-2));
+  border: 1px solid var(--glass-border);
   border-radius: var(--r-md);
   padding: 18px;
-  box-shadow: var(--shadow-blue);
-  transition: transform 0.25s, box-shadow 0.25s;
+
+  box-shadow: var(--shadow-md);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+
+  transition: transform 0.25s, box-shadow 0.25s, border-color 0.25s;
 }
 
 .feature-card:hover {
   transform: translateY(-4px);
-  box-shadow: var(--shadow-blue-hover);
+  box-shadow: var(--shadow-lg);
+  border-color: var(--ui-border-med);
 }
 
 .feature-card h3 {
   margin: 0 0 8px;
   font-size: 16px;
-  color: #9fd4ff;
+  color: var(--primary);
 }
 
 .feature-card p {
   margin: 0;
-  color: rgba(255, 255, 255, 0.75);
+  color: var(--ui-fg-1);
   font-size: 14px;
 }
 

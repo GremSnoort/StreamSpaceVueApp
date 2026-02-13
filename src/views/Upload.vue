@@ -11,7 +11,7 @@
         <span class="field-label">Video Title</span>
         <input
           v-model="title"
-          class="control"
+          class="input"
           type="text"
           placeholder="Enter a video title"
           autocomplete="off"
@@ -23,16 +23,16 @@
         <span class="field-label">Description</span>
         <textarea
           v-model="description"
-          class="control control-textarea"
+          class="input input-textarea"
           placeholder="Enter a short description"
-        ></textarea>
+        />
       </label>
 
       <!-- Drop zone -->
       <button
         type="button"
         class="drop"
-        :class="{ dragging }"
+        :class="{ 'is-dragging': dragging, 'has-file': !!file }"
         @click="openFileDialog"
         @dragover.prevent="dragging = true"
         @dragleave.prevent="dragging = false"
@@ -45,10 +45,10 @@
             Drop a video file here or click to choose…
           </p>
           <p v-else class="drop-text">
-            Selected: <strong>{{ file.name }}</strong>
+            Selected: <strong class="drop-file">{{ file.name }}</strong>
           </p>
 
-          <p class="drop-hint">Supported: MP4 / HLS source files (video/*)</p>
+          <p class="drop-hint">Supported: MP4 / video/*</p>
         </div>
 
         <input
@@ -132,6 +132,8 @@ async function upload() {
 <style scoped>
 /* page-specific only */
 
+/* page-specific only */
+
 .upload {
   padding: 28px;
   max-width: 900px;
@@ -144,9 +146,8 @@ async function upload() {
 
 .upload-subtitle {
   margin: 10px 0 0;
-  color: var(--muted);
-  font-size: 14px;
-  opacity: 0.9;
+  color: var(--primary);
+  opacity: 0.85;
 }
 
 /* form */
@@ -155,54 +156,43 @@ async function upload() {
   gap: var(--space-4);
 }
 
-/* fields */
-.field {
-  display: grid;
-  gap: 8px;
-}
-
-.field-label {
-  font-size: 14px;
-  font-weight: 700;
-  color: #9bc6ff;
-}
-
-.control {
-  width: 100%;
-  padding: 12px 14px;
-  border-radius: var(--r-md);
-  border: 1px solid rgba(30, 144, 255, 0.18);
-  background: rgba(0, 0, 0, 0.35);
-  color: #fff;
-  font-size: 15px;
-  outline: none;
-  transition: border-color 0.2s, box-shadow 0.2s;
-}
-
-.control:focus {
-  border-color: rgba(79, 138, 255, 0.85);
-  box-shadow: 0 0 0 3px rgba(79, 138, 255, 0.18);
-}
-
-.control-textarea {
-  min-height: 96px;
+/* textarea sizing */
+.input-textarea {
+  min-height: 110px;
   resize: vertical;
 }
 
 /* drop zone */
 .drop {
-  border: 2px dashed rgba(79, 138, 255, 0.45);
+  width: 100%;
   border-radius: var(--r-lg);
-  background: rgba(0, 0, 0, 0.25);
-  padding: 28px;
-  cursor: pointer;
+  padding: 26px;
   text-align: center;
-  transition: 0.2s;
+  cursor: pointer;
+
+  border: 2px dashed var(--glass-border);
+  background: linear-gradient(145deg, var(--glass-1), var(--glass-2));
+  box-shadow: var(--shadow-soft);
+
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+
+  transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s, background 0.2s;
 }
 
-.drop.dragging {
-  border-color: rgba(79, 138, 255, 0.95);
-  background: rgba(79, 138, 255, 0.12);
+.drop:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.drop.is-dragging {
+  border-color: var(--ui-border-strong);
+  box-shadow: var(--shadow-lg);
+  transform: translateY(-2px);
+}
+
+.drop.has-file {
+  border-color: var(--ui-border-med);
 }
 
 .drop-inner {
@@ -214,24 +204,31 @@ async function upload() {
 .drop-icon {
   width: 42px;
   height: 42px;
-  border-radius: 12px;
+  border-radius: 14px;
+
   display: grid;
   place-items: center;
-  background: rgba(79, 138, 255, 0.15);
-  border: 1px solid rgba(79, 138, 255, 0.25);
-  color: #cfe8ff;
-  font-weight: 800;
+
+  background: var(--ui-surface-1);
+  border: 1px solid var(--ui-border-1);
+
+  color: var(--text);
+  font-weight: 900;
 }
 
 .drop-text {
   margin: 0;
-  color: rgba(255, 255, 255, 0.82);
+  color: var(--ui-fg-1);
+}
+
+.drop-file {
+  color: var(--text);
 }
 
 .drop-hint {
   margin: 0;
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.55);
+  color: var(--ui-fg-2);
 }
 
 .hidden-input {
@@ -246,9 +243,11 @@ async function upload() {
   margin-top: var(--space-2);
 }
 
-.btn-lg {
-  padding: 12px 18px;
-  border-radius: var(--r-md);
-  font-weight: 700;
+/* disabled state */
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
 }
+
 </style>

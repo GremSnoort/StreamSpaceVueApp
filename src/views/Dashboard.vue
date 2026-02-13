@@ -23,7 +23,7 @@ watch(
 <template>
   <div class="dash">
     <!-- Sidebar -->
-    <aside class="dash-sidebar">
+    <aside class="panel dash-sidebar">
       <nav class="dash-menu">
         <h2 class="dash-logo">StreamSpace</h2>
 
@@ -57,7 +57,6 @@ watch(
         Logged in as <span class="dash-user">{{ auth.user.email }}</span>
       </header>
 
-      <!-- центрируем как PageLayout, но внутри dashboard -->
       <section class="page dash-page">
         <RouterView />
       </section>
@@ -66,36 +65,35 @@ watch(
 </template>
 
 <style scoped>
-/* layout */
+/* layout only */
 .dash {
-  min-height: calc(100vh - 80px); /* navbar fixed */
+  min-height: calc(100vh - 80px);
   display: flex;
   width: 100%;
 }
 
-/* sidebar */
+/* sidebar uses design-system panel */
 .dash-sidebar {
   width: 240px;
   flex-shrink: 0;
-  border-right: 1px solid var(--border);
-  background: linear-gradient(145deg, var(--panel), var(--panel-2));
   padding: var(--space-6) var(--space-5);
   display: flex;
   flex-direction: column;
+  border-right: 1px solid var(--border);
+  border-radius: 0; /* чтобы стык с контентом был ровный (если хочешь) */
 }
 
 .dash-menu {
-  display: flex;
-  flex-direction: column;
+  display: grid;
   gap: 12px;
 }
 
 .dash-logo {
   margin: 0 0 var(--space-5);
   font-size: 20px;
-  font-weight: 700;
-  color: #44aaff;
-  letter-spacing: 0.4px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+  color: var(--title-grad-1);
 }
 
 .dash-logo::before {
@@ -107,20 +105,20 @@ watch(
 .dash-link {
   position: relative;
   text-decoration: none;
-  color: #bcdfff;
+  color: var(--nav-link);
   padding: 10px 12px;
   border-radius: var(--r-md);
-  transition: 0.2s;
+  transition: background 0.2s, color 0.2s, transform 0.2s;
 }
 
 .dash-link:hover {
-  background: rgba(30, 144, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .dash-link.is-active {
-  background: linear-gradient(135deg, rgba(79, 138, 255, 0.9), rgba(48, 109, 255, 0.65));
   color: #fff;
-  box-shadow: var(--shadow-blue);
+  background: linear-gradient(90deg, var(--primary), var(--primary-2));
+  box-shadow: var(--shadow-md);
 }
 
 .dash-link.is-active::before {
@@ -131,10 +129,9 @@ watch(
   bottom: 8px;
   width: 4px;
   border-radius: 4px;
-  background: rgba(79, 138, 255, 0.9);
+  background: linear-gradient(180deg, var(--primary), var(--primary-2));
 }
 
-/* footer */
 .dash-footer {
   margin-top: auto;
   padding-top: var(--space-5);
@@ -156,26 +153,28 @@ watch(
 }
 
 .dash-user {
-  font-weight: 700;
-  color: #cfe8ff;
+  font-weight: 800;
+  color: var(--text);
 }
 
-/* center page content */
+/* page spacing inside dashboard */
 .dash-page {
   padding-top: var(--space-6);
   padding-bottom: var(--space-6);
 }
 
-/* responsive: sidebar goes top */
+/* responsive */
 @media (max-width: 900px) {
   .dash {
     flex-direction: column;
   }
+
   .dash-sidebar {
     width: 100%;
     border-right: none;
     border-bottom: 1px solid var(--border);
   }
+
   .dash-link.is-active::before {
     left: 0;
   }
