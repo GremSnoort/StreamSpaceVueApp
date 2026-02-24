@@ -34,6 +34,13 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f backend/migrations/130_purchases_func
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f backend/migrations/131_download_tokens_maintenance.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f backend/migrations/140_transcoding_functions.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f backend/migrations/150_feed_functions.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f backend/migrations/160_folder_write_functions.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f backend/migrations/161_favorites_functions.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f backend/migrations/162_video_library_functions.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f backend/migrations/163_transcoding_assets_functions.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f backend/migrations/164_social_write_extras.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f backend/migrations/165_feed_hot_functions.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f backend/migrations/166_video_stream_access_functions.sql
 ```
 
 ```bash

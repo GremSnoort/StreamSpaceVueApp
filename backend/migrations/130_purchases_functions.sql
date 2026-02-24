@@ -15,7 +15,42 @@ LANGUAGE plpgsql
 AS $$
 DECLARE
   v_id uuid;
+  v_video_owner_id uuid;
 BEGIN
+  IF p_buyer_id IS NULL THEN
+    RAISE EXCEPTION 'buyer_id is required';
+  END IF;
+
+  IF p_video_id IS NULL THEN
+    RAISE EXCEPTION 'video_id is required';
+  END IF;
+
+  IF p_amount_cents IS NULL OR p_amount_cents < 0 THEN
+    RAISE EXCEPTION 'amount_cents must be >= 0';
+  END IF;
+
+  IF p_currency IS NULL OR length(btrim(p_currency::text)) <> 3 THEN
+    RAISE EXCEPTION 'currency must be a 3-letter code';
+  END IF;
+
+  SELECT v.owner_id
+  INTO v_video_owner_id
+  FROM videos v
+  WHERE v.id = p_video_id
+    AND v.status <> 'deleted';
+
+  IF v_video_owner_id IS NULL THEN
+    RAISE EXCEPTION 'Video not found (or deleted)';
+  END IF;
+
+  IF v_video_owner_id = p_buyer_id THEN
+    RAISE EXCEPTION 'Cannot purchase your own video';
+  END IF;
+
+  IF NOT can_view_video(p_buyer_id, p_video_id) THEN
+    RAISE EXCEPTION 'No access to video for purchase';
+  END IF;
+
   INSERT INTO download_purchases(buyer_id, video_id, amount_cents, currency, status, provider, provider_payment_id)
   VALUES (p_buyer_id, p_video_id, p_amount_cents, upper(p_currency), 'pending', p_provider, p_provider_payment_id)
   RETURNING id INTO v_id;

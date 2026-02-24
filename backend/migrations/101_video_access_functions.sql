@@ -3,7 +3,7 @@ BEGIN;
 
 -- Можно ли смотреть видео (viewer_id может быть NULL для гостя)
 -- Правила:
--- 1) Владелец видит всегда (любой status, unpublished/private тоже).
+-- 1) Владелец видит всегда (кроме deleted; unpublished/private тоже).
 -- 2) Остальные: только published_at IS NOT NULL и status='ready'
 --    public -> всем
 --    protected -> только подписчикам (viewer_id NOT NULL + follow)
@@ -16,6 +16,7 @@ AS $$
     SELECT 1
     FROM videos v
     WHERE v.id = p_video_id
+      AND v.status <> 'deleted'
       AND (
         -- владелец видит всегда
         (p_viewer_id IS NOT NULL AND v.owner_id = p_viewer_id)
@@ -49,21 +50,28 @@ LANGUAGE sql
 STABLE
 AS $$
   SELECT EXISTS (
-  SELECT 1
-  FROM videos v
-  WHERE v.id = p_video_id
-    AND v.status <> 'deleted'
-    AND (
-      (p_user_id IS NOT NULL AND v.owner_id = p_user_id)
-      OR EXISTS (
-        SELECT 1
-        FROM download_purchases p
-        WHERE p.buyer_id = p_user_id
-          AND p.video_id = p_video_id
-          AND p.status = 'paid'
+    SELECT 1
+    FROM videos v
+    WHERE v.id = p_video_id
+      AND v.status <> 'deleted'
+      AND p_user_id IS NOT NULL
+      AND (
+        -- свои видео: бесплатно
+        v.owner_id = p_user_id
+
+        -- чужие: только paid purchase + при наличии права просмотра
+        OR (
+          can_view_video(p_user_id, v.id)
+          AND EXISTS (
+            SELECT 1
+            FROM download_purchases p
+            WHERE p.buyer_id = p_user_id
+              AND p.video_id = p_video_id
+              AND p.status = 'paid'
+          )
+        )
       )
-    )
-);
+  );
 $$;
 
 COMMIT;

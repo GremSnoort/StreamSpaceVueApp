@@ -42,7 +42,7 @@ END $$;
 -- Добавить видео в папку:
 -- - папка должна принадлежать added_by
 -- - если tree_type='library' -> видео должно принадлежать added_by и быть не deleted
--- - если tree_type='favorites' -> видео может быть любым, но НЕ deleted
+-- - если tree_type='favorites' -> видео должно быть доступно для просмотра added_by
 CREATE OR REPLACE FUNCTION folder_add_video(
   p_folder_id uuid,
   p_video_id uuid,
@@ -85,11 +85,11 @@ BEGIN
       SELECT 1
       FROM videos v
       WHERE v.id = p_video_id
-        AND v.status <> 'deleted'
+        AND can_view_video(p_added_by, v.id)
     ) INTO v_ok;
 
     IF NOT v_ok THEN
-      RAISE EXCEPTION 'Video not found (or deleted)';
+      RAISE EXCEPTION 'Favorites folder can contain only videos visible to user';
     END IF;
   END IF;
 
