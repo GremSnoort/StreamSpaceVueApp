@@ -35,6 +35,14 @@ watch(
           🎞 My Videos
         </RouterLink>
 
+        <RouterLink to="/dashboard/library" class="dash-link" active-class="is-active">
+          🗂 Library
+        </RouterLink>
+
+        <RouterLink to="/dashboard/favorites" class="dash-link" active-class="is-active">
+          ⭐ Favorites
+        </RouterLink>
+
         <RouterLink to="/dashboard/upload" class="dash-link" active-class="is-active">
           ⬆ Upload
         </RouterLink>
@@ -42,6 +50,7 @@ watch(
         <RouterLink to="/dashboard/profile" class="dash-link" active-class="is-active">
           👤 Profile
         </RouterLink>
+
       </nav>
 
       <div class="dash-footer">
@@ -149,12 +158,12 @@ watch(
 .dash-topbar {
   padding: 16px 22px;
   border-bottom: 1px solid var(--border);
-  color: var(--muted);
+  color: var(--ui-fg-2);
 }
 
 .dash-user {
   font-weight: 800;
-  color: var(--text);
+  color: var(--ui-fg-1);
 }
 
 /* page spacing inside dashboard */

@@ -1,19 +1,27 @@
 <script setup>
 import { ref } from 'vue'
 import { useAuthStore } from '../stores/auth'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 
-const email = ref('')
+const loginValue = ref('')
 const password = ref('')
+const errorText = ref('')
+const pending = ref(false)
 const auth = useAuthStore()
 const router = useRouter()
+const route = useRoute()
 
 async function submit() {
+  errorText.value = ''
+  pending.value = true
   try {
-    await auth.login(email.value, password.value)
-    router.push('/dashboard')
+    await auth.login(loginValue.value, password.value)
+    const next = typeof route.query.next === 'string' ? route.query.next : '/dashboard'
+    router.push(next)
   } catch (err) {
-    alert(err.message)
+    errorText.value = err.userMessage || err.message || 'Login failed'
+  } finally {
+    pending.value = false
   }
 }
 </script>
@@ -25,12 +33,12 @@ async function submit() {
 
       <form @submit.prevent="submit" class="auth-form">
         <label class="field">
-          <span class="field-label">Email</span>
+          <span class="field-label">Email or Username</span>
           <input
-            v-model="email"
-            type="email"
-            autocomplete="email"
-            placeholder="you@example.com"
+            v-model="loginValue"
+            type="text"
+            autocomplete="username"
+            placeholder="you@example.com or username"
             class="input"
           />
         </label>
@@ -46,8 +54,10 @@ async function submit() {
           />
         </label>
 
+        <p v-if="errorText" class="auth-error">{{ errorText }}</p>
+
         <button class="btn btn-primary btn-wide" type="submit">
-          Login
+          {{ pending ? 'Logging in…' : 'Login' }}
         </button>
       </form>
 
@@ -58,3 +68,11 @@ async function submit() {
     </div>
   </div>
 </template>
+
+<style scoped>
+.auth-error {
+  margin: 0;
+  color: #ff8f8f;
+  font-size: 14px;
+}
+</style>

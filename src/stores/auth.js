@@ -1,22 +1,56 @@
-import { defineStore } from 'pinia'
-import authService from '../services/authService'
+import { defineStore } from "pinia";
+import authService from "../services/authService";
 
-export const useAuthStore = defineStore('auth', {
+export const useAuthStore = defineStore("auth", {
   state: () => ({
-    user: JSON.parse(localStorage.getItem('user')) || null
+    user: JSON.parse(localStorage.getItem("user")) || null,
+    isRestoring: false
   }),
+
+  getters: {
+    isAuthenticated: (s) => !!s.user
+  },
+
   actions: {
-    async login(email, password) {
-      this.user = await authService.login(email, password)
-      localStorage.setItem('user', JSON.stringify(this.user))
+    setUser(user) {
+      this.user = user;
+      if (user) localStorage.setItem("user", JSON.stringify(user));
+      else localStorage.removeItem("user");
     },
-    async register(email, password) {
-      this.user = await authService.register(email, password)
-      localStorage.setItem('user', JSON.stringify(this.user))
+
+    async login(login, password) {
+      const user = await authService.login(login, password);
+      this.setUser(user);
+      return user;
     },
-    logout() {
-      this.user = null
-      localStorage.removeItem('user')
+
+    async register(email, username, password) {
+      const user = await authService.register(email, username, password);
+      this.setUser(user);
+      return user;
+    },
+
+    async logout() {
+      await authService.logout();
+      this.setUser(null);
+    },
+
+    async tryRestoreSession() {
+      // чтобы не стрелять запросом /auth/me на каждый переход
+      if (this.isRestoring) return this.user;
+
+      this.isRestoring = true;
+      try {
+        const user = await authService.me();
+        this.setUser(user);
+        return user;
+      } catch (err) {
+        // если 401 — сессии нет, просто очищаем
+        this.setUser(null);
+        return null;
+      } finally {
+        this.isRestoring = false;
+      }
     }
   }
-})
+});

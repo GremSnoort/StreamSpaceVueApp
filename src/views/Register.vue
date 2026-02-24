@@ -4,16 +4,23 @@ import { useAuthStore } from '../stores/auth'
 import { useRouter } from 'vue-router'
 
 const email = ref('')
+const username = ref('')
 const password = ref('')
+const errorText = ref('')
+const pending = ref(false)
 const auth = useAuthStore()
 const router = useRouter()
 
 async function submit() {
+  errorText.value = ''
+  pending.value = true
   try {
-    await auth.register(email.value, password.value)
+    await auth.register(email.value, username.value, password.value)
     router.push('/dashboard')
   } catch (err) {
-    alert(err.message)
+    errorText.value = err.userMessage || err.message || 'Registration failed'
+  } finally {
+    pending.value = false
   }
 }
 </script>
@@ -36,6 +43,17 @@ async function submit() {
         </label>
 
         <label class="field">
+          <span class="field-label">Username</span>
+          <input
+            v-model="username"
+            type="text"
+            autocomplete="username"
+            placeholder="your_username"
+            class="input"
+          />
+        </label>
+
+        <label class="field">
           <span class="field-label">Password</span>
           <input
             v-model="password"
@@ -46,8 +64,10 @@ async function submit() {
           />
         </label>
 
+        <p v-if="errorText" class="auth-error">{{ errorText }}</p>
+
         <button class="btn btn-primary btn-wide" type="submit">
-          Register
+          {{ pending ? 'Creating…' : 'Register' }}
         </button>
       </form>
 
@@ -58,3 +78,11 @@ async function submit() {
     </div>
   </div>
 </template>
+
+<style scoped>
+.auth-error {
+  margin: 0;
+  color: #ff8f8f;
+  font-size: 14px;
+}
+</style>

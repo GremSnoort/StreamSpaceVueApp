@@ -28,7 +28,16 @@
         />
       </label>
 
-      <!-- Drop zone -->
+      <label class="field">
+        <span class="field-label">Visibility</span>
+        <select v-model="visibility" class="input">
+          <option value="private">private</option>
+          <option value="protected">protected</option>
+          <option value="public">public</option>
+        </select>
+      </label>
+
+      <!-- Drop zone (metadata only for now, upload will be wired next) -->
       <button
         type="button"
         class="drop"
@@ -62,7 +71,7 @@
 
       <!-- Actions -->
       <div class="actions">
-        <button class="btn btn-primary btn-lg" type="submit" :disabled="!file || uploading">
+        <button class="btn btn-primary btn-lg" type="submit" :disabled="uploading">
           {{ uploading ? "Uploading…" : "Upload" }}
         </button>
 
@@ -81,6 +90,7 @@ import { useRouter } from "vue-router"
 
 const title = ref("")
 const description = ref("")
+const visibility = ref("private")
 const file = ref(null)
 const dragging = ref(false)
 const uploading = ref(false)
@@ -107,22 +117,25 @@ function goGallery() {
 }
 
 async function upload() {
-  if (!file.value || uploading.value) return
+  if (uploading.value) return
+  if (!title.value.trim()) {
+    alert("Title is required")
+    return
+  }
 
   uploading.value = true
-  const formData = new FormData()
-  formData.append("title", title.value)
-  formData.append("description", description.value)
-  formData.append("file", file.value)
 
   try {
-    await http.post("/media/upload", formData, {
-      headers: { "Content-Type": "multipart/form-data" }
+    await http.post("/videos", {
+      title: title.value.trim(),
+      description: description.value.trim() || null,
+      visibility: visibility.value
     })
+    alert("Video card created. File upload pipeline will be connected in next step.")
     router.push({ name: "gallery" })
   } catch (err) {
     console.error("Upload failed:", err)
-    alert("Upload failed!")
+    alert(err?.response?.data?.message || "Upload failed!")
   } finally {
     uploading.value = false
   }

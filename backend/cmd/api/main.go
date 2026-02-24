@@ -64,11 +64,12 @@ type rpcResponse struct {
 }
 
 type app struct {
-	db           *pgxpool.Pool
-	fns          map[string]fnDef
-	storageRoot  string
-	internalAuth string
-	cookieSecure bool
+	db                 *pgxpool.Pool
+	fns                map[string]fnDef
+	storageRoot        string
+	internalAuth       string
+	cookieSecure       bool
+	corsAllowedOrigins map[string]struct{}
 }
 
 func main() {
@@ -87,11 +88,12 @@ func main() {
 	}
 
 	a := &app{
-		db:           pool,
-		fns:          buildFunctionRegistry(),
-		storageRoot:  envOrDefault("STORAGE_ROOT", filepath.Join("..", "uploads")),
-		internalAuth: strings.TrimSpace(os.Getenv("INTERNAL_API_TOKEN")),
-		cookieSecure: envBoolDefault("COOKIE_SECURE", false),
+		db:                 pool,
+		fns:                buildFunctionRegistry(),
+		storageRoot:        envOrDefault("STORAGE_ROOT", filepath.Join("..", "uploads")),
+		internalAuth:       strings.TrimSpace(os.Getenv("INTERNAL_API_TOKEN")),
+		cookieSecure:       envBoolDefault("COOKIE_SECURE", false),
+		corsAllowedOrigins: parseAllowedOrigins(envOrDefault("CORS_ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")),
 	}
 
 	r := chi.NewRouter()
@@ -99,6 +101,7 @@ func main() {
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Logger)
+	r.Use(a.cors)
 	r.Use(a.optionalAuth)
 
 	r.Get("/healthz", a.handleHealth)
@@ -2017,6 +2020,40 @@ func writeError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]any{
 		"error": msg,
 		"ok":    false,
+	})
+}
+
+func parseAllowedOrigins(csv string) map[string]struct{} {
+	out := make(map[string]struct{})
+	for _, raw := range strings.Split(csv, ",") {
+		origin := strings.TrimSpace(raw)
+		if origin == "" {
+			continue
+		}
+		out[origin] = struct{}{}
+	}
+	return out
+}
+
+func (a *app) cors(next http.Handler) http.Handler {
+	allowHeaders := "Content-Type, Authorization, X-Session-Token"
+	allowMethods := "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		origin := strings.TrimSpace(r.Header.Get("Origin"))
+		if origin != "" {
+			if _, ok := a.corsAllowedOrigins[origin]; ok {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+				w.Header().Set("Vary", "Origin")
+				w.Header().Set("Access-Control-Allow-Credentials", "true")
+				w.Header().Set("Access-Control-Allow-Headers", allowHeaders)
+				w.Header().Set("Access-Control-Allow-Methods", allowMethods)
+			}
+		}
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		next.ServeHTTP(w, r)
 	})
 }
 

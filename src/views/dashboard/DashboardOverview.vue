@@ -10,14 +10,14 @@ const stats = ref({
 
 onMounted(async () => {
   try {
-    const res = await http.get('/media')
-    const media = res.data || []
+    const res = await http.get('/me/videos')
+    const media = Array.isArray(res.data?.items) ? res.data.items : []
 
     stats.value.videos = media.length
 
     if (media.length) {
       const last = media[media.length - 1]
-      stats.value.lastUpload = new Date(last.createdAt).toLocaleDateString()
+      stats.value.lastUpload = new Date(last.created_at).toLocaleDateString()
     }
 
     stats.value.storage = `${(media.length * 42).toFixed(1)} MB`

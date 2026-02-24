@@ -18,22 +18,24 @@
 
     <div v-else class="grid player-grid">
       <VideoPlayer
-        :src="absUrl(media.playUrl)"
-        :poster="absUrl(media.preview)"
+        v-if="manifestUrl"
+        :src="manifestUrl"
+        :poster="posterUrl"
         :autoplay="true"
         :muted="false"
         @error="onPlayerError"
       />
+      <div v-else class="status">Playback is not ready yet.</div>
 
       <section class="meta">
         <h2 class="meta-title">{{ media.title }}</h2>
         <p class="meta-desc">{{ media.description }}</p>
 
         <div class="meta-actions">
-          <!-- download: лучше без target=_blank, иначе download может игнорироваться -->
-          <a class="btn btn-secondary" :href="downloadUrl" download>
-            ⬇ Download
-          </a>
+          <button class="btn btn-secondary" type="button" @click="requestDownloadSource">
+            ⬇ Get Download Source
+          </button>
+          <code v-if="downloadSourceKey">{{ downloadSourceKey }}</code>
         </div>
       </section>
     </div>
@@ -52,31 +54,30 @@ const router = useRouter()
 const id = route.params.id
 const media = ref(null)
 const loading = ref(true)
+const manifestPath = ref('')
+const downloadSourceKey = ref('')
 
-const apiBase = import.meta.env.VITE_API_BASE || '/api'
+const apiBase = (import.meta.env.VITE_API_BASE || 'http://localhost:8080').replace(/\/+$/, '')
 
 function absUrl(path) {
   if (!path) return ''
   if (path.startsWith('http')) return path
-  return apiBase.replace(/\/+$/, '') + '/' + path.replace(/^\/+/, '')
+  return `${apiBase}/${path.replace(/^\/+/, '')}`
 }
 
 async function loadMedia() {
   loading.value = true
   try {
-    const res = await http.get(`/media/${id}`)
-    media.value = res.data || null
+    const [videoRes, playbackRes] = await Promise.all([
+      http.get(`/videos/${id}`),
+      http.get(`/videos/${id}/playback`)
+    ])
+    media.value = videoRes.data || null
+    manifestPath.value = playbackRes.data?.manifestUrl || ''
   } catch (err) {
     console.error('Media load error:', err)
-
-    // fallback — список
-    try {
-      const resList = await http.get('/media')
-      const arr = Array.isArray(resList.data) ? resList.data : []
-      media.value = arr.find(i => String(i.id) === String(id)) || null
-    } catch {
-      media.value = null
-    }
+    media.value = null
+    manifestPath.value = ''
   } finally {
     loading.value = false
   }
@@ -90,7 +91,24 @@ function onPlayerError(e) {
   console.error('player error', e)
 }
 
-const downloadUrl = computed(() => (media.value ? absUrl(media.value.url) : ''))
+async function requestDownloadSource() {
+  try {
+    const { data } = await http.get(`/videos/${id}/download`)
+    downloadSourceKey.value = data?.sourceKey || ''
+  } catch (err) {
+    downloadSourceKey.value = ''
+    alert(err?.response?.data?.message || 'No download rights')
+  }
+}
+
+const manifestUrl = computed(() => absUrl(manifestPath.value))
+const posterUrl = computed(() => {
+  const key = media.value?.poster_key
+  if (!key) return ''
+  if (String(key).startsWith('http')) return key
+  const name = String(key).split('/').pop()
+  return `${apiBase}/stream/hls/${id}/${name}`
+})
 
 onMounted(loadMedia)
 </script>

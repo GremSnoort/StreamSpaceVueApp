@@ -25,7 +25,7 @@
         <button class="thumb" type="button" @click="goPlay(video)" title="Play">
           <img
             class="thumb-img"
-            :src="absUrl(video.preview)"
+            :src="posterUrl(video)"
             alt="Preview"
             loading="lazy"
           />
@@ -34,16 +34,14 @@
 
         <div class="video-body">
           <h2 class="video-title">{{ video.title }}</h2>
-          <p class="video-desc">{{ video.description }}</p>
+          <p class="video-desc">
+            Visibility: {{ video.visibility }} · Status: {{ video.status }}
+          </p>
 
           <div class="video-actions">
             <button class="btn btn-primary" @click="goPlay(video)">▶ Play</button>
 
-            <a class="btn btn-secondary" :href="absUrl(video.url)" download>
-              ⬇ Download
-            </a>
-
-            <button class="btn btn-danger" @click="confirmDelete(video)">
+            <button class="btn btn-danger" :disabled="!video.created_at" @click="confirmDelete(video)">
               🗑 Delete
             </button>
           </div>
@@ -61,22 +59,41 @@ import http from '../lib/http'
 const videos = ref([])
 const loading = ref(true)
 
-const apiBase = import.meta.env.VITE_API_BASE || '/api'
+const apiBase = (import.meta.env.VITE_API_BASE || 'http://localhost:8080').replace(/\/+$/, '')
+const fallbackPoster = 'https://placehold.co/640x360?text=No+Poster'
 
-function absUrl(path) {
-  if (!path) return ''
-  if (path.startsWith('http')) return path
-  return apiBase.replace(/\/+$/, '') + '/' + path.replace(/^\/+/, '')
+function posterUrl(video) {
+  if (!video?.poster_key) return fallbackPoster
+  if (String(video.poster_key).startsWith('http')) return video.poster_key
+  const name = String(video.poster_key).split('/').pop()
+  return `${apiBase}/stream/hls/${video.id}/${name}`
 }
 
 async function loadVideos() {
   loading.value = true
   try {
-    const res = await http.get('/media')
-    videos.value = Array.isArray(res.data) ? res.data : []
+    const res = await http.get('/me/videos')
+    videos.value = Array.isArray(res.data?.items) ? res.data.items : []
   } catch (err) {
-    console.error('Gallery load error:', err)
-    videos.value = []
+    if (err?.response?.status === 401) {
+      try {
+        const res = await http.get('/feed/hot')
+        const items = Array.isArray(res.data?.items) ? res.data.items : []
+        videos.value = items.map((v) => ({
+          id: v.video_id,
+          title: v.title,
+          poster_key: v.poster_key,
+          visibility: 'public',
+          status: 'ready'
+        }))
+      } catch (feedErr) {
+        console.error('Public gallery load error:', feedErr)
+        videos.value = []
+      }
+    } else {
+      console.error('Gallery load error:', err)
+      videos.value = []
+    }
   } finally {
     loading.value = false
   }
@@ -86,7 +103,7 @@ async function confirmDelete(video) {
   if (!confirm(`Delete "${video.title}"? This cannot be undone.`)) return
 
   try {
-    await http.delete(`/media/${video.id}`)
+    await http.delete(`/videos/${video.id}`)
     await loadVideos()
   } catch (err) {
     alert('Delete failed.')
