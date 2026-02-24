@@ -26,7 +26,8 @@ STABLE
 AS $$
   WITH cfg AS (
     SELECT now() AS now_ts,
-           now() - p_window AS window_start
+           now() - p_window AS window_start,
+           GREATEST(1::numeric, (EXTRACT(EPOCH FROM p_window) / 3600.0)::numeric) AS window_hours
   ),
   visible AS (
     SELECT v.id, v.owner_id, v.title, v.poster_key, v.published_at, cfg.now_ts
@@ -71,13 +72,14 @@ AS $$
       + COALESCE(vc.cnt, 0)::numeric * 4.0
       + GREATEST(
           0::numeric,
-          48::numeric - (EXTRACT(EPOCH FROM (v.now_ts - v.published_at)) / 3600.0)::numeric
+          cfg.window_hours - (EXTRACT(EPOCH FROM (v.now_ts - v.published_at)) / 3600.0)::numeric
         ) * 0.1
     ) AS score,
     COALESCE(vv.cnt, 0) AS views_window,
     COALESCE(vr.likes_cnt, 0) AS likes_window,
     COALESCE(vc.cnt, 0) AS comments_window
   FROM visible v
+  CROSS JOIN cfg
   LEFT JOIN vv ON vv.video_id = v.id
   LEFT JOIN vr ON vr.video_id = v.id
   LEFT JOIN vc ON vc.video_id = v.id

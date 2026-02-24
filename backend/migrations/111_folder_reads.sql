@@ -170,7 +170,7 @@ END $$;
 
 
 -- 4) Быстрый read: “избранное” без знания folder_id
---    По умолчанию ищем корневую папку favorites с именем 'favorites' (можно менять)
+--    По умолчанию берём первую корневую папку favorites (имя не фиксировано)
 CREATE OR REPLACE FUNCTION favorites_list_videos(
   p_owner_id uuid,
   p_limit integer DEFAULT 50,
@@ -196,7 +196,7 @@ AS $$
     WHERE f.owner_id = p_owner_id
       AND f.tree_type = 'favorites'
       AND f.parent_id IS NULL
-      AND f.name = 'favorites'
+    ORDER BY f.created_at ASC, f.id ASC
     LIMIT 1
   )
   SELECT
