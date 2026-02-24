@@ -137,12 +137,12 @@ BEGIN
     END IF;
 
     -- снимаем "залипшие" просроченные токены, чтобы они не блокировали новый
-    UPDATE video_download_tokens
+    UPDATE video_download_tokens t
     SET revoked_at = now()
-    WHERE purchase_id = p_purchase_id
-      AND used_at IS NULL
-      AND revoked_at IS NULL
-      AND expires_at <= now();
+    WHERE t.purchase_id = p_purchase_id
+      AND t.used_at IS NULL
+      AND t.revoked_at IS NULL
+      AND t.expires_at <= now();
 
   ELSE
     -- owner: purchase_id не обязателен; если передали — проверим соответствие видео

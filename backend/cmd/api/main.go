@@ -1342,7 +1342,8 @@ func (a *app) optionalAuth(next http.Handler) http.Handler {
 
 func (a *app) fetchUserBySession(ctx context.Context, token string) (*authUser, error) {
 	const q = `
-		SELECT user_id::text, email::text, username::text, display_name, avatar_url, is_active
+		SELECT user_id::text, email::text, username::text,
+		       COALESCE(display_name, ''), COALESCE(avatar_url, ''), is_active
 		FROM auth_get_user_by_session($1)
 		LIMIT 1`
 

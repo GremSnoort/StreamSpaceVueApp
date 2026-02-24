@@ -22,7 +22,8 @@ BEGIN
     RAISE EXCEPTION 'favorites root name must be non-empty';
   END IF;
 
-  PERFORM pg_advisory_xact_lock(hashtext('favorites-root:' || p_owner_id::text || ':' || lower(p_name)));
+  -- Lock на owner-level, чтобы не создавать дубли root-папок в гонках.
+  PERFORM pg_advisory_xact_lock(hashtext('favorites-root:' || p_owner_id::text));
 
   SELECT f.id
   INTO v_folder_id
@@ -30,7 +31,6 @@ BEGIN
   WHERE f.owner_id = p_owner_id
     AND f.tree_type = 'favorites'
     AND f.parent_id IS NULL
-    AND f.name = p_name
   ORDER BY f.created_at ASC, f.id ASC
   LIMIT 1;
 
