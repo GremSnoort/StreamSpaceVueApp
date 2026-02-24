@@ -25,9 +25,10 @@ go run ./cmd/api
 
 - `GET /healthz`
 
-### Current user
+### Auth / Session
 
-- `GET /api/me`
+- `GET /auth/me`
+- `GET /api/me` (legacy alias)
 
 Auth token sources:
 
@@ -82,3 +83,37 @@ curl -X POST \
 - Service intentionally keeps business logic in DB functions (Fat DB).
 - HTTP layer is transport/auth/validation glue.
 - Function whitelist is in `cmd/api/main.go` (`buildFunctionRegistry`).
+
+### REST (coexists with RPC)
+
+Implemented first wave:
+
+- `GET /users/{userId}`
+- `POST|DELETE /users/{userId}/follow`
+- `GET /me/following`
+- `GET /me/followers`
+- `GET|POST /me/folders`
+- `GET /me/folders/tree`
+- `GET|PATCH|DELETE /me/folders/{folderId}`
+- `GET|POST /me/folders/{folderId}/videos`
+- `DELETE /me/folders/{folderId}/videos/{videoId}`
+- `POST /me/folders/{folderId}/videos/{videoId}/move`
+- `POST /videos`
+- `GET|PATCH|DELETE /videos/{videoId}`
+- `POST /videos/{videoId}/publish`
+- `POST /videos/{videoId}/unpublish`
+- `GET /me/videos`
+- `GET /users/{userId}/videos`
+- `GET|PUT /videos/{videoId}/reaction`
+- `GET|POST /videos/{videoId}/comments`
+- `PATCH|DELETE /videos/{videoId}/comments/{commentId}`
+- `GET /me/favorites`
+- `PUT|DELETE /me/favorites/{videoId}`
+- `GET /me/favorites/{videoId}`
+- `POST /videos/{videoId}/purchase-download`
+- `GET /me/purchases`
+- `GET /me/purchases/{purchaseId}`
+- `POST /videos/{videoId}/download-token`
+- `GET /feed/following`
+- `GET /feed/hot`
+- `GET /feed`
