@@ -1,7 +1,39 @@
 # Smoke test Migrations
 
+## Поднять временный кластер PostgreSQL (локально)
+
+Ниже та же схема, которую используем для локальных проверок миграций/e2e.
+
 ```bash
-export DATABASE_URL="postgres://app:app@localhost:5432/app?sslmode=disable"
+# 1) Бинарники PostgreSQL
+export PG_BIN_DIR="$HOME/ARENADATA/github/orioledb/output_bin/bin"
+export PATH="$PG_BIN_DIR:$PATH"
+
+# 2) Временный data-dir
+export PGDATA="/tmp/pgdata-demo"
+rm -rf "$PGDATA"
+
+# 3) Инициализировать и запустить кластер
+initdb -D "$PGDATA" --encoding=UTF8 --locale=C.UTF-8
+pg_ctl -D "$PGDATA" -l "$PGDATA/server.log" start
+
+# 4) Создать роль/БД приложения
+createuser -h localhost -p 5432 app
+createdb  -h localhost -p 5432 -O app app
+
+# 5) Подключение для миграций
+export DATABASE_URL="postgres://app@localhost:5432/app?sslmode=disable"
+```
+
+Остановить и удалить кластер после проверки:
+
+```bash
+pg_ctl -D "$PGDATA" stop -m fast
+rm -rf "$PGDATA"
+```
+
+```bash
+export DATABASE_URL="postgres://app@localhost:5432/app?sslmode=disable"
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f backend/migrations/00_extensions.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f backend/migrations/01_enums.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f backend/migrations/10_users.sql
