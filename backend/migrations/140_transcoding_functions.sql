@@ -13,9 +13,15 @@ BEGIN
   VALUES (p_video_id, 'queued', p_priority, now())
   RETURNING id INTO v_id;
 
-  -- видео переходит в processing
+  -- Для непубликованных видео переводим в processing.
+  -- Для уже опубликованных оставляем status=ready, чтобы не нарушать
+  -- chk_published_only_when_ready и продолжать отдавать текущий HLS,
+  -- пока идет re-transcode.
   UPDATE videos
-  SET status = 'processing',
+  SET status = CASE
+        WHEN published_at IS NOT NULL THEN status
+        ELSE 'processing'
+      END,
       updated_at = now()
   WHERE id = p_video_id;
 
@@ -67,10 +73,13 @@ LANGUAGE plpgsql
 AS $$
 DECLARE
   v_video_id uuid;
+  v_video_is_published boolean;
 BEGIN
-  SELECT video_id INTO v_video_id
-  FROM video_transcode_jobs
-  WHERE id = p_job_id;
+  SELECT j.video_id, (v.published_at IS NOT NULL)
+  INTO v_video_id, v_video_is_published
+  FROM video_transcode_jobs j
+  JOIN videos v ON v.id = j.video_id
+  WHERE j.id = p_job_id;
 
   UPDATE video_transcode_jobs
   SET status = p_status,
@@ -87,10 +96,18 @@ BEGIN
         updated_at = now()
     WHERE id = v_video_id;
   ELSIF p_status IN ('failed','canceled') THEN
-    UPDATE videos
-    SET status = 'failed',
-        updated_at = now()
-    WHERE id = v_video_id;
+    -- Если это re-transcode опубликованного видео, сохраняем ready + published_at:
+    -- старые ассеты остаются валидными.
+    IF v_video_is_published THEN
+      UPDATE videos
+      SET updated_at = now()
+      WHERE id = v_video_id;
+    ELSE
+      UPDATE videos
+      SET status = 'failed',
+          updated_at = now()
+      WHERE id = v_video_id;
+    END IF;
   END IF;
 END $$;
 

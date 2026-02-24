@@ -7,8 +7,11 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"os"
+	"path"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -18,6 +21,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"golang.org/x/crypto/bcrypt"
 )
 
 type contextKey string
@@ -60,8 +64,11 @@ type rpcResponse struct {
 }
 
 type app struct {
-	db  *pgxpool.Pool
-	fns map[string]fnDef
+	db           *pgxpool.Pool
+	fns          map[string]fnDef
+	storageRoot  string
+	internalAuth string
+	cookieSecure bool
 }
 
 func main() {
@@ -79,7 +86,13 @@ func main() {
 		log.Fatalf("pg ping: %v", err)
 	}
 
-	a := &app{db: pool, fns: buildFunctionRegistry()}
+	a := &app{
+		db:           pool,
+		fns:          buildFunctionRegistry(),
+		storageRoot:  envOrDefault("STORAGE_ROOT", filepath.Join("..", "uploads")),
+		internalAuth: strings.TrimSpace(os.Getenv("INTERNAL_API_TOKEN")),
+		cookieSecure: envBoolDefault("COOKIE_SECURE", false),
+	}
 
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
@@ -89,6 +102,9 @@ func main() {
 	r.Use(a.optionalAuth)
 
 	r.Get("/healthz", a.handleHealth)
+	r.Post("/auth/register", a.handleAuthRegister)
+	r.Post("/auth/login", a.handleAuthLogin)
+	r.Post("/auth/logout", a.handleAuthLogout)
 	r.Get("/auth/me", a.handleMe)
 	r.Get("/api/me", a.handleMe)
 	r.Post("/api/v1/rpc/{function}", a.handleRPC)
@@ -133,9 +149,12 @@ func main() {
 		r.Delete("/{videoId}", a.handleDeleteVideo)
 		r.Post("/{videoId}/publish", a.handlePublishVideo)
 		r.Post("/{videoId}/unpublish", a.handleUnpublishVideo)
+		r.Get("/{videoId}/playback", a.handleGetVideoPlayback)
+		r.Get("/{videoId}/download", a.handleGetVideoDownload)
 
 		r.Get("/{videoId}/reaction", a.handleGetVideoReaction)
 		r.Put("/{videoId}/reaction", a.handlePutVideoReaction)
+		r.Get("/{videoId}/reactions", a.handleListVideoReactions)
 
 		r.Get("/{videoId}/comments", a.handleListVideoComments)
 		r.Post("/{videoId}/comments", a.handleCreateVideoComment)
@@ -151,6 +170,17 @@ func main() {
 		r.Get("/hot", a.handleFeedHot)
 		r.Get("/", a.handleFeedCombined)
 	})
+
+	r.Post("/purchases/{purchaseId}/status", a.handleSetPurchaseStatus)
+
+	r.Route("/internal/transcode", func(r chi.Router) {
+		r.Post("/enqueue", a.handleInternalTranscodeEnqueue)
+		r.Post("/claim", a.handleInternalTranscodeClaim)
+		r.Post("/finish", a.handleInternalTranscodeFinish)
+		r.Post("/assets", a.handleInternalTranscodeAssets)
+	})
+
+	r.Get("/stream/hls/{videoId}/*", a.handleStreamHLS)
 
 	srv := &http.Server{
 		Addr:              ":" + port,
@@ -373,6 +403,126 @@ func (a *app) handleRPC(w http.ResponseWriter, r *http.Request) {
 		Data:     data,
 		OK:       true,
 	})
+}
+
+type registerRequest struct {
+	Email    string `json:"email"`
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+type loginRequest struct {
+	Login    string `json:"login"`
+	Password string `json:"password"`
+}
+
+func (a *app) handleAuthRegister(w http.ResponseWriter, r *http.Request) {
+	var req registerRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	req.Email = strings.TrimSpace(req.Email)
+	req.Username = strings.TrimSpace(req.Username)
+	if req.Email == "" || req.Username == "" || len(req.Password) < 6 {
+		writeError(w, http.StatusBadRequest, "email, username and password(min 6) are required")
+		return
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "cannot hash password")
+		return
+	}
+
+	var user authUser
+	const q = `
+		INSERT INTO users(email, username, password_hash, display_name)
+		VALUES ($1::citext, $2::citext, $3, $2::text)
+		RETURNING id::text, email::text, username::text, COALESCE(display_name,''), COALESCE(avatar_url,''), is_active`
+	if err := a.db.QueryRow(r.Context(), q, req.Email, req.Username, string(hash)).Scan(
+		&user.UserID, &user.Email, &user.Username, &user.DisplayName, &user.AvatarURL, &user.IsActive,
+	); err != nil {
+		a.writeDBError(w, err)
+		return
+	}
+
+	sess, err := a.createSession(r.Context(), user.UserID, r.UserAgent(), clientIP(r), 30*24*time.Hour)
+	if err != nil {
+		a.writeDBError(w, err)
+		return
+	}
+	a.setSessionCookie(w, sess.Token, sess.ExpiresAt)
+	writeJSON(w, http.StatusCreated, map[string]any{"user": user})
+}
+
+func (a *app) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
+	var req loginRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	login := strings.TrimSpace(req.Login)
+	if login == "" || req.Password == "" {
+		writeError(w, http.StatusBadRequest, "login and password are required")
+		return
+	}
+
+	var (
+		user         authUser
+		passwordHash string
+	)
+	const q = `
+		SELECT id::text, email::text, username::text, COALESCE(display_name,''), COALESCE(avatar_url,''), is_active, COALESCE(password_hash,'')
+		FROM users
+		WHERE email = $1::citext OR username = $1::citext
+		LIMIT 1`
+	err := a.db.QueryRow(r.Context(), q, login).Scan(
+		&user.UserID, &user.Email, &user.Username, &user.DisplayName, &user.AvatarURL, &user.IsActive, &passwordHash,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		writeError(w, http.StatusUnauthorized, "invalid credentials")
+		return
+	}
+	if err != nil {
+		a.writeDBError(w, err)
+		return
+	}
+	if !user.IsActive {
+		writeError(w, http.StatusForbidden, "user is inactive")
+		return
+	}
+
+	// backward compatibility for seeded non-bcrypt hashes
+	if strings.HasPrefix(passwordHash, "$2a$") || strings.HasPrefix(passwordHash, "$2b$") || strings.HasPrefix(passwordHash, "$2y$") {
+		if err := bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(req.Password)); err != nil {
+			writeError(w, http.StatusUnauthorized, "invalid credentials")
+			return
+		}
+	} else if passwordHash != req.Password {
+		writeError(w, http.StatusUnauthorized, "invalid credentials")
+		return
+	}
+
+	sess, err := a.createSession(r.Context(), user.UserID, r.UserAgent(), clientIP(r), 30*24*time.Hour)
+	if err != nil {
+		a.writeDBError(w, err)
+		return
+	}
+	a.setSessionCookie(w, sess.Token, sess.ExpiresAt)
+	writeJSON(w, http.StatusOK, map[string]any{"user": user})
+}
+
+func (a *app) handleAuthLogout(w http.ResponseWriter, r *http.Request) {
+	token := extractSessionToken(r)
+	if token == "" {
+		a.clearSessionCookie(w)
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	_, _ = a.callScalar(r.Context(), "auth_delete_session", token)
+	a.clearSessionCookie(w)
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (a *app) handleGetUserProfile(w http.ResponseWriter, r *http.Request) {
@@ -1317,6 +1467,298 @@ func (a *app) handleFeedCombined(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"items": items})
 }
 
+func (a *app) handleGetVideoPlayback(w http.ResponseWriter, r *http.Request) {
+	videoID := chi.URLParam(r, "videoId")
+	var viewerID any
+	if u, ok := getUser(r.Context()); ok {
+		viewerID = u.UserID
+	}
+	raw, err := a.callTableOne(r.Context(), "video_get_hls_master_for_viewer", viewerID, videoID)
+	if err != nil {
+		a.writeDBError(w, err)
+		return
+	}
+	if string(raw) == "null" {
+		writeError(w, http.StatusNotFound, "not found")
+		return
+	}
+	obj, _ := decodeRawAny(raw).(map[string]any)
+	masterName := "master.m3u8"
+	if v, ok := obj["hls_master_key"].(string); ok && strings.TrimSpace(v) != "" {
+		masterName = path.Base(v)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"type":        "hls",
+		"manifestUrl": fmt.Sprintf("/stream/hls/%s/%s", videoID, masterName),
+		"meta":        obj,
+	})
+}
+
+func (a *app) handleListVideoReactions(w http.ResponseWriter, r *http.Request) {
+	videoID := chi.URLParam(r, "videoId")
+	var viewerID any
+	if u, ok := getUser(r.Context()); ok {
+		viewerID = u.UserID
+	}
+	raw, err := a.callTableList(
+		r.Context(),
+		"video_list_reactions",
+		videoID,
+		viewerID,
+		queryStringOrNil(r, "value"),
+		queryIntDefault(r, "limit", 50),
+		queryStringOrNil(r, "cursorCreatedAt"),
+		queryStringOrNil(r, "cursorUserId"),
+	)
+	if err != nil {
+		a.writeDBError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": decodeRawAny(raw)})
+}
+
+func (a *app) handleGetVideoDownload(w http.ResponseWriter, r *http.Request) {
+	u, ok := requireUser(w, r)
+	if !ok {
+		return
+	}
+	videoID := chi.URLParam(r, "videoId")
+	if token := strings.TrimSpace(r.URL.Query().Get("token")); token != "" {
+		consumed, err := a.callScalar(r.Context(), "download_token_consume", token)
+		if err != nil {
+			a.writeDBError(w, err)
+			return
+		}
+		got, _ := decodeRawAny(consumed).(string)
+		if got == "" || got != videoID {
+			writeError(w, http.StatusForbidden, "invalid or expired token")
+			return
+		}
+	}
+
+	raw, err := a.callScalar(r.Context(), "video_get_download_source_for_user", u.UserID, videoID)
+	if err != nil {
+		a.writeDBError(w, err)
+		return
+	}
+	key, _ := decodeRawAny(raw).(string)
+	if strings.TrimSpace(key) == "" {
+		writeError(w, http.StatusForbidden, "no download rights")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"sourceKey": key})
+}
+
+type purchaseStatusRequest struct {
+	Status string `json:"status"`
+}
+
+func (a *app) handleSetPurchaseStatus(w http.ResponseWriter, r *http.Request) {
+	if !a.requireInternal(w, r) {
+		return
+	}
+	var req purchaseStatusRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if strings.TrimSpace(req.Status) == "" {
+		writeError(w, http.StatusBadRequest, "status is required")
+		return
+	}
+	if err := a.callExec(r.Context(), "purchase_set_status", chi.URLParam(r, "purchaseId"), req.Status); err != nil {
+		a.writeDBError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+type transcodeEnqueueRequest struct {
+	VideoID  string `json:"videoId"`
+	Priority *int   `json:"priority"`
+}
+
+func (a *app) handleInternalTranscodeEnqueue(w http.ResponseWriter, r *http.Request) {
+	if !a.requireInternal(w, r) {
+		return
+	}
+	var req transcodeEnqueueRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	priority := 100
+	if req.Priority != nil {
+		priority = *req.Priority
+	}
+	raw, err := a.callScalar(r.Context(), "transcode_enqueue", req.VideoID, priority)
+	if err != nil {
+		a.writeDBError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"jobId": decodeRawAny(raw)})
+}
+
+type transcodeClaimRequest struct {
+	WorkerID string `json:"workerId"`
+}
+
+func (a *app) handleInternalTranscodeClaim(w http.ResponseWriter, r *http.Request) {
+	if !a.requireInternal(w, r) {
+		return
+	}
+	var req transcodeClaimRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	raw, err := a.callTableOne(r.Context(), "transcode_claim_next", req.WorkerID)
+	if err != nil {
+		a.writeDBError(w, err)
+		return
+	}
+	if string(raw) == "null" {
+		writeJSON(w, http.StatusOK, map[string]any{"job": nil})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"job": decodeRawAny(raw)})
+}
+
+type transcodeFinishRequest struct {
+	JobID        string  `json:"jobId"`
+	Status       string  `json:"status"`
+	ErrorMessage *string `json:"errorMessage"`
+	HLSMasterKey *string `json:"hlsMasterKey"`
+	PosterKey    *string `json:"posterKey"`
+}
+
+func (a *app) handleInternalTranscodeFinish(w http.ResponseWriter, r *http.Request) {
+	if !a.requireInternal(w, r) {
+		return
+	}
+	var req transcodeFinishRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := a.callExec(r.Context(), "transcode_finish", req.JobID, req.Status, nilIfPtr(req.ErrorMessage), nilIfPtr(req.HLSMasterKey), nilIfPtr(req.PosterKey)); err != nil {
+		a.writeDBError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+type transcodeAssetsRequest struct {
+	VideoID         string          `json:"videoId"`
+	DurationSeconds *int            `json:"durationSeconds"`
+	Width           *int            `json:"width"`
+	Height          *int            `json:"height"`
+	SourceSizeBytes *int64          `json:"sourceSizeBytes"`
+	Variants        json.RawMessage `json:"variants"`
+	HLSMasterKey    *string         `json:"hlsMasterKey"`
+	PosterKey       *string         `json:"posterKey"`
+}
+
+func (a *app) handleInternalTranscodeAssets(w http.ResponseWriter, r *http.Request) {
+	if !a.requireInternal(w, r) {
+		return
+	}
+	var req transcodeAssetsRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if strings.TrimSpace(req.VideoID) == "" {
+		writeError(w, http.StatusBadRequest, "videoId is required")
+		return
+	}
+	_, err := a.callScalar(
+		r.Context(),
+		"transcode_set_video_media_info",
+		req.VideoID,
+		req.DurationSeconds,
+		req.Width,
+		req.Height,
+		req.SourceSizeBytes,
+	)
+	if err != nil {
+		a.writeDBError(w, err)
+		return
+	}
+	if len(req.Variants) > 0 && string(req.Variants) != "null" {
+		const q = "SELECT to_jsonb(x) FROM (SELECT transcode_replace_hls_variants($1, $2::jsonb) AS x) t"
+		var raw []byte
+		if err := a.db.QueryRow(r.Context(), q, req.VideoID, string(req.Variants)).Scan(&raw); err != nil {
+			a.writeDBError(w, err)
+			return
+		}
+	}
+	if req.HLSMasterKey != nil && strings.TrimSpace(*req.HLSMasterKey) != "" {
+		_, err := a.callScalar(
+			r.Context(),
+			"transcode_finalize_video",
+			req.VideoID,
+			*req.HLSMasterKey,
+			nilIfPtr(req.PosterKey),
+			req.DurationSeconds,
+			req.Width,
+			req.Height,
+		)
+		if err != nil {
+			a.writeDBError(w, err)
+			return
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (a *app) handleStreamHLS(w http.ResponseWriter, r *http.Request) {
+	videoID := chi.URLParam(r, "videoId")
+	filePart := strings.TrimSpace(chi.URLParam(r, "*"))
+	if filePart == "" {
+		writeError(w, http.StatusNotFound, "not found")
+		return
+	}
+	var viewerID any
+	if u, ok := getUser(r.Context()); ok {
+		viewerID = u.UserID
+	}
+	raw, err := a.callTableOne(r.Context(), "video_get_hls_master_for_viewer", viewerID, videoID)
+	if err != nil {
+		a.writeDBError(w, err)
+		return
+	}
+	if string(raw) == "null" {
+		writeError(w, http.StatusForbidden, "forbidden")
+		return
+	}
+	obj, _ := decodeRawAny(raw).(map[string]any)
+	masterKey, _ := obj["hls_master_key"].(string)
+	if strings.TrimSpace(masterKey) == "" {
+		writeError(w, http.StatusNotFound, "not found")
+		return
+	}
+	baseDir := path.Dir(masterKey)
+	cleanedPart := path.Clean("/" + filePart)
+	if strings.HasPrefix(cleanedPart, "/../") || cleanedPart == "/.." {
+		writeError(w, http.StatusBadRequest, "invalid path")
+		return
+	}
+	relativePart := strings.TrimPrefix(cleanedPart, "/")
+	key := path.Clean(path.Join(baseDir, relativePart))
+	if !strings.HasPrefix(key, baseDir) {
+		writeError(w, http.StatusBadRequest, "invalid path")
+		return
+	}
+	fsPath := filepath.Join(a.storageRoot, filepath.FromSlash(key))
+	if strings.HasSuffix(strings.ToLower(fsPath), ".m3u8") {
+		w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
+	} else if strings.HasSuffix(strings.ToLower(fsPath), ".ts") {
+		w.Header().Set("Content-Type", "video/mp2t")
+	}
+	http.ServeFile(w, r, fsPath)
+}
+
 func (a *app) optionalAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token := extractSessionToken(r)
@@ -1363,6 +1805,60 @@ func (a *app) fetchUserBySession(ctx context.Context, token string) (*authUser, 
 		return nil, err
 	}
 	return &u, nil
+}
+
+type createdSession struct {
+	Token     string
+	ExpiresAt time.Time
+}
+
+func (a *app) createSession(ctx context.Context, userID, userAgent, ip string, ttl time.Duration) (*createdSession, error) {
+	const q = `
+		SELECT session_token, expires_at
+		FROM auth_create_session($1::uuid, $2, $3::inet, $4::interval)
+		LIMIT 1`
+	var s createdSession
+	if err := a.db.QueryRow(ctx, q, userID, userAgent, ip, ttl.String()).Scan(&s.Token, &s.ExpiresAt); err != nil {
+		return nil, err
+	}
+	return &s, nil
+}
+
+func (a *app) setSessionCookie(w http.ResponseWriter, token string, expiresAt time.Time) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     "session_token",
+		Value:    token,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   a.cookieSecure,
+		SameSite: http.SameSiteLaxMode,
+		Expires:  expiresAt,
+	})
+}
+
+func (a *app) clearSessionCookie(w http.ResponseWriter) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     "session_token",
+		Value:    "",
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   a.cookieSecure,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   -1,
+		Expires:  time.Unix(0, 0),
+	})
+}
+
+func (a *app) requireInternal(w http.ResponseWriter, r *http.Request) bool {
+	if a.internalAuth == "" {
+		return true
+	}
+	got := strings.TrimSpace(r.Header.Get("X-Internal-Token"))
+	if got == "" || got != a.internalAuth {
+		writeError(w, http.StatusUnauthorized, "internal auth failed")
+		return false
+	}
+	return true
 }
 
 func (a *app) callScalar(ctx context.Context, name string, args ...any) (json.RawMessage, error) {
@@ -1441,6 +1937,9 @@ func (a *app) tableOneAsJSON(ctx context.Context, callSQL string, args ...any) (
 	q := "SELECT to_jsonb(t) FROM (SELECT * FROM " + callSQL + " LIMIT 1) t"
 	var raw []byte
 	if err := a.db.QueryRow(ctx, q, args...).Scan(&raw); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return json.RawMessage("null"), nil
+		}
 		return nil, err
 	}
 	if raw == nil {
@@ -1624,4 +2123,36 @@ func envOrDefault(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+func envBoolDefault(key string, fallback bool) bool {
+	v := strings.TrimSpace(strings.ToLower(os.Getenv(key)))
+	if v == "" {
+		return fallback
+	}
+	switch v {
+	case "1", "true", "yes", "on":
+		return true
+	case "0", "false", "no", "off":
+		return false
+	default:
+		return fallback
+	}
+}
+
+func clientIP(r *http.Request) string {
+	if v := strings.TrimSpace(r.Header.Get("X-Forwarded-For")); v != "" {
+		parts := strings.Split(v, ",")
+		if len(parts) > 0 {
+			return strings.TrimSpace(parts[0])
+		}
+	}
+	if v := strings.TrimSpace(r.Header.Get("X-Real-IP")); v != "" {
+		return v
+	}
+	host, _, err := net.SplitHostPort(strings.TrimSpace(r.RemoteAddr))
+	if err == nil {
+		return host
+	}
+	return "127.0.0.1"
 }
