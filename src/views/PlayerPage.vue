@@ -17,15 +17,26 @@
     </div>
 
     <div v-else class="grid player-grid">
-      <VideoPlayer
-        v-if="manifestUrl"
-        :src="manifestUrl"
-        :poster="posterUrl"
-        :autoplay="true"
-        :muted="false"
-        @error="onPlayerError"
-      />
-      <div v-else class="status">Playback is not ready yet.</div>
+      <section ref="playerShell" class="player-shell" :class="{ 'is-half': playerSize === 'half' }">
+        <div class="player-toolbar">
+          <button class="btn btn-secondary" type="button" @click="toggleHalfSize">
+            {{ playerSize === 'half' ? 'Fixed size' : '50% width' }}
+          </button>
+          <button class="btn btn-secondary" type="button" @click="enterFullscreen">
+            Fullscreen
+          </button>
+        </div>
+
+        <VideoPlayer
+          v-if="manifestUrl"
+          :src="manifestUrl"
+          :poster="posterUrl"
+          :autoplay="true"
+          :muted="false"
+          @error="onPlayerError"
+        />
+      </section>
+      <div v-if="!manifestUrl" class="status">Playback is not ready yet.</div>
 
       <section class="meta">
         <h2 class="meta-title">{{ media.title }}</h2>
@@ -56,6 +67,8 @@ const media = ref(null)
 const loading = ref(true)
 const manifestPath = ref('')
 const downloadSourceKey = ref('')
+const playerSize = ref('fixed')
+const playerShell = ref(null)
 
 const apiBase = (import.meta.env.VITE_API_BASE || 'http://localhost:8080').replace(/\/+$/, '')
 
@@ -89,6 +102,20 @@ function goBack() {
 
 function onPlayerError(e) {
   console.error('player error', e)
+}
+
+function toggleHalfSize() {
+  playerSize.value = playerSize.value === 'half' ? 'fixed' : 'half'
+}
+
+async function enterFullscreen() {
+  const el = playerShell.value
+  if (!el?.requestFullscreen) return
+  try {
+    await el.requestFullscreen()
+  } catch (err) {
+    console.error('fullscreen error', err)
+  }
 }
 
 async function requestDownloadSource() {
@@ -151,6 +178,74 @@ onMounted(loadMedia)
 /* layout */
 .player-grid {
   gap: 18px;
+  grid-template-columns: 1fr;
+}
+
+.player-shell {
+  width: min(760px, 100%);
+  margin: 0 auto;
+}
+
+.player-shell.is-half {
+  width: min(50vw, 100%);
+}
+
+.player-toolbar {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-bottom: 10px;
+}
+
+.player-shell :deep(.video-player) {
+  max-height: 72vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+}
+
+.player-shell :deep(.video-player__el) {
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 72vh;
+  object-fit: contain;
+}
+
+.player-shell:fullscreen {
+  width: 100vw;
+  max-width: none;
+  height: 100vh;
+  margin: 0;
+  padding: 12px;
+  box-sizing: border-box;
+  background: #000;
+  display: flex;
+  flex-direction: column;
+}
+
+.player-shell:fullscreen .player-toolbar {
+  margin-bottom: 8px;
+}
+
+.player-shell:fullscreen :deep(.video-player) {
+  flex: 1 1 auto;
+  height: 100%;
+  max-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+}
+
+.player-shell:fullscreen :deep(.video-player__el) {
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  min-height: 0;
+  object-fit: contain;
 }
 
 /* meta block */
@@ -176,5 +271,12 @@ onMounted(loadMedia)
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+@media (max-width: 900px) {
+  .player-shell,
+  .player-shell.is-half {
+    width: 100%;
+  }
 }
 </style>

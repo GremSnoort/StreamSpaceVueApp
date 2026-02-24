@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"strconv"
@@ -70,6 +71,9 @@ type app struct {
 	internalAuth       string
 	cookieSecure       bool
 	corsAllowedOrigins map[string]struct{}
+	workerID           string
+	ffmpegBin          string
+	ffprobeBin         string
 }
 
 func main() {
@@ -94,6 +98,9 @@ func main() {
 		internalAuth:       strings.TrimSpace(os.Getenv("INTERNAL_API_TOKEN")),
 		cookieSecure:       envBoolDefault("COOKIE_SECURE", false),
 		corsAllowedOrigins: parseAllowedOrigins(envOrDefault("CORS_ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")),
+		workerID:           envOrDefault("TRANSCODE_WORKER_ID", "api-worker-1"),
+		ffmpegBin:          envOrDefault("FFMPEG_BIN", "ffmpeg"),
+		ffprobeBin:         envOrDefault("FFPROBE_BIN", "ffprobe"),
 	}
 
 	r := chi.NewRouter()
@@ -146,6 +153,7 @@ func main() {
 	})
 
 	r.Route("/videos", func(r chi.Router) {
+		r.Post("/upload", a.handleVideoUpload)
 		r.Post("/", a.handleCreateVideo)
 		r.Get("/{videoId}", a.handleGetVideo)
 		r.Patch("/{videoId}", a.handlePatchVideo)
@@ -195,6 +203,9 @@ func main() {
 	}
 
 	log.Printf("backend started on :%s", port)
+	if envBoolDefault("TRANSCODE_WORKER_ENABLED", true) {
+		go a.runTranscodeWorker(context.Background())
+	}
 	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatalf("http server: %v", err)
 	}
@@ -897,6 +908,114 @@ func (a *app) handleCreateVideo(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{"videoId": videoID})
+}
+
+func (a *app) handleVideoUpload(w http.ResponseWriter, r *http.Request) {
+	u, ok := requireUser(w, r)
+	if !ok {
+		return
+	}
+
+	if err := r.ParseMultipartForm(512 << 20); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid multipart form")
+		return
+	}
+
+	title := strings.TrimSpace(r.FormValue("title"))
+	description := strings.TrimSpace(r.FormValue("description"))
+	visibility := strings.TrimSpace(r.FormValue("visibility"))
+	if visibility == "" {
+		visibility = "private"
+	}
+	if title == "" {
+		writeError(w, http.StatusBadRequest, "title is required")
+		return
+	}
+
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "file is required")
+		return
+	}
+	defer file.Close()
+
+	videoRaw, err := a.callScalar(
+		r.Context(),
+		"video_create",
+		u.UserID,
+		title,
+		nilIfEmpty(description),
+		visibility,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+	)
+	if err != nil {
+		a.writeDBError(w, err)
+		return
+	}
+	videoID, ok := decodeRawAny(videoRaw).(string)
+	if !ok || strings.TrimSpace(videoID) == "" {
+		writeError(w, http.StatusInternalServerError, "cannot create video")
+		return
+	}
+
+	safeName := sanitizeFilename(header.Filename)
+	if safeName == "" {
+		safeName = "source.bin"
+	}
+	sourceKey := path.Join("videos", videoID, "source", safeName)
+	sourceAbsPath := filepath.Join(a.storageRoot, filepath.FromSlash(sourceKey))
+	if err := os.MkdirAll(filepath.Dir(sourceAbsPath), 0o755); err != nil {
+		writeError(w, http.StatusInternalServerError, "cannot prepare upload directory")
+		return
+	}
+	dst, err := os.Create(sourceAbsPath)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "cannot save upload")
+		return
+	}
+	written, copyErr := io.Copy(dst, file)
+	closeErr := dst.Close()
+	if copyErr != nil || closeErr != nil {
+		_, _ = a.db.Exec(r.Context(), "UPDATE videos SET status='failed', updated_at=now() WHERE id=$1::uuid", videoID)
+		writeError(w, http.StatusInternalServerError, "cannot write uploaded file")
+		return
+	}
+
+	if _, err := a.db.Exec(
+		r.Context(),
+		`UPDATE videos
+		 SET source_original_name=$2,
+		     source_mime_type=$3,
+		     source_size_bytes=$4,
+		     source_storage_key=$5,
+		     updated_at=now()
+		 WHERE id=$1::uuid AND owner_id=$6::uuid`,
+		videoID,
+		safeName,
+		nilIfEmpty(header.Header.Get("Content-Type")),
+		written,
+		sourceKey,
+		u.UserID,
+	); err != nil {
+		_, _ = a.db.Exec(r.Context(), "UPDATE videos SET status='failed', updated_at=now() WHERE id=$1::uuid", videoID)
+		a.writeDBError(w, err)
+		return
+	}
+
+	if _, err := a.callScalar(r.Context(), "transcode_enqueue", videoID, 100); err != nil {
+		_, _ = a.db.Exec(r.Context(), "UPDATE videos SET status='failed', updated_at=now() WHERE id=$1::uuid", videoID)
+		a.writeDBError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, map[string]any{
+		"videoId": videoID,
+		"status":  "processing",
+	})
 }
 
 func (a *app) handleGetVideo(w http.ResponseWriter, r *http.Request) {
@@ -1754,12 +1873,264 @@ func (a *app) handleStreamHLS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	fsPath := filepath.Join(a.storageRoot, filepath.FromSlash(key))
+	if _, statErr := os.Stat(fsPath); statErr != nil {
+		if errors.Is(statErr, os.ErrNotExist) && !strings.Contains(relativePart, "/") {
+			legacyKey := path.Join("videos", videoID, relativePart)
+			legacyPath := filepath.Join(a.storageRoot, filepath.FromSlash(legacyKey))
+			if _, legacyErr := os.Stat(legacyPath); legacyErr == nil {
+				fsPath = legacyPath
+			}
+		}
+	}
 	if strings.HasSuffix(strings.ToLower(fsPath), ".m3u8") {
 		w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
 	} else if strings.HasSuffix(strings.ToLower(fsPath), ".ts") {
 		w.Header().Set("Content-Type", "video/mp2t")
+	} else if strings.HasSuffix(strings.ToLower(fsPath), ".jpg") || strings.HasSuffix(strings.ToLower(fsPath), ".jpeg") {
+		w.Header().Set("Content-Type", "image/jpeg")
+	} else if strings.HasSuffix(strings.ToLower(fsPath), ".png") {
+		w.Header().Set("Content-Type", "image/png")
 	}
 	http.ServeFile(w, r, fsPath)
+}
+
+type claimedJob struct {
+	JobID           string
+	VideoID         string
+	InputStorageKey string
+}
+
+func (a *app) runTranscodeWorker(ctx context.Context) {
+	log.Printf("transcode worker started: worker_id=%s", a.workerID)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
+		job, err := a.claimNextTranscodeJob(ctx)
+		if err != nil {
+			log.Printf("transcode claim error: %v", err)
+			time.Sleep(2 * time.Second)
+			continue
+		}
+		if job == nil {
+			time.Sleep(1500 * time.Millisecond)
+			continue
+		}
+
+		if err := a.processTranscodeJob(ctx, *job); err != nil {
+			log.Printf("transcode job failed: video=%s job=%s err=%v", job.VideoID, job.JobID, err)
+		}
+	}
+}
+
+func (a *app) claimNextTranscodeJob(ctx context.Context) (*claimedJob, error) {
+	raw, err := a.callTableOne(ctx, "transcode_claim_next", a.workerID)
+	if err != nil {
+		return nil, err
+	}
+	if string(raw) == "null" {
+		return nil, nil
+	}
+	obj, _ := decodeRawAny(raw).(map[string]any)
+	if obj == nil {
+		return nil, nil
+	}
+	jobID, _ := obj["job_id"].(string)
+	videoID, _ := obj["video_id"].(string)
+	inputKey, _ := obj["input_storage_key"].(string)
+	if strings.TrimSpace(jobID) == "" || strings.TrimSpace(videoID) == "" {
+		return nil, nil
+	}
+	return &claimedJob{
+		JobID:           jobID,
+		VideoID:         videoID,
+		InputStorageKey: inputKey,
+	}, nil
+}
+
+func (a *app) processTranscodeJob(ctx context.Context, job claimedJob) error {
+	sourceKey := strings.TrimSpace(job.InputStorageKey)
+	if sourceKey == "" {
+		var err error
+		sourceKey, err = a.getVideoSourceKey(ctx, job.VideoID)
+		if err != nil {
+			_ = a.finishTranscodeJob(ctx, job.JobID, "failed", "source key is missing", "", "")
+			return err
+		}
+	}
+	if sourceKey == "" {
+		_ = a.finishTranscodeJob(ctx, job.JobID, "failed", "source key is empty", "", "")
+		return errors.New("source key is empty")
+	}
+
+	inputPath := filepath.Join(a.storageRoot, filepath.FromSlash(sourceKey))
+	if _, err := os.Stat(inputPath); err != nil {
+		_ = a.finishTranscodeJob(ctx, job.JobID, "failed", "source file not found", "", "")
+		return err
+	}
+
+	hlsDirKey := path.Join("videos", job.VideoID, "hls")
+	hlsDirPath := filepath.Join(a.storageRoot, filepath.FromSlash(hlsDirKey))
+	if err := os.MkdirAll(hlsDirPath, 0o755); err != nil {
+		_ = a.finishTranscodeJob(ctx, job.JobID, "failed", "cannot create hls directory", "", "")
+		return err
+	}
+	masterKey := path.Join(hlsDirKey, "master.m3u8")
+	masterPath := filepath.Join(a.storageRoot, filepath.FromSlash(masterKey))
+	segmentPattern := filepath.Join(hlsDirPath, "seg_%03d.ts")
+
+	if err := runCommand(30*time.Minute, a.ffmpegBin,
+		"-y",
+		"-i", inputPath,
+		"-c:v", "libx264",
+		"-preset", "veryfast",
+		"-crf", "23",
+		"-c:a", "aac",
+		"-b:a", "128k",
+		"-vf", "scale=-2:720",
+		"-f", "hls",
+		"-hls_time", "4",
+		"-hls_playlist_type", "vod",
+		"-hls_segment_filename", segmentPattern,
+		masterPath,
+	); err != nil {
+		_ = a.finishTranscodeJob(ctx, job.JobID, "failed", err.Error(), "", "")
+		return err
+	}
+
+	posterKey := path.Join(hlsDirKey, "poster.jpg")
+	posterPath := filepath.Join(a.storageRoot, filepath.FromSlash(posterKey))
+	if err := runCommand(2*time.Minute, a.ffmpegBin,
+		"-y",
+		"-ss", "00:00:01",
+		"-i", inputPath,
+		"-frames:v", "1",
+		posterPath,
+	); err != nil {
+		log.Printf("poster extraction warning: video=%s err=%v", job.VideoID, err)
+		posterKey = ""
+	}
+
+	duration, width, height := a.probeMediaInfo(inputPath)
+	_, _ = a.callScalar(ctx, "transcode_set_video_media_info", job.VideoID, intOrNil(duration), intOrNil(width), intOrNil(height), nil)
+
+	variantsJSON := fmt.Sprintf(`[{"playlist_key":"%s","bandwidth":1500000,"width":%s,"height":%s,"codecs":"avc1.42e01f,mp4a.40.2"}]`,
+		masterKey,
+		intJSON(width),
+		intJSON(height),
+	)
+	const q = "SELECT to_jsonb(x) FROM (SELECT transcode_replace_hls_variants($1, $2::jsonb) AS x) t"
+	var discard []byte
+	if err := a.db.QueryRow(ctx, q, job.VideoID, variantsJSON).Scan(&discard); err != nil {
+		_ = a.finishTranscodeJob(ctx, job.JobID, "failed", "cannot store hls variants", "", "")
+		return err
+	}
+
+	if _, err := a.callScalar(
+		ctx,
+		"transcode_finalize_video",
+		job.VideoID,
+		masterKey,
+		nilIfEmpty(posterKey),
+		intOrNil(duration),
+		intOrNil(width),
+		intOrNil(height),
+	); err != nil {
+		_ = a.finishTranscodeJob(ctx, job.JobID, "failed", "cannot finalize video", "", "")
+		return err
+	}
+
+	if err := a.finishTranscodeJob(ctx, job.JobID, "succeeded", "", masterKey, posterKey); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (a *app) finishTranscodeJob(ctx context.Context, jobID, status, errorMsg, masterKey, posterKey string) error {
+	var errArg any
+	if strings.TrimSpace(errorMsg) != "" {
+		errArg = errorMsg
+	}
+	var masterArg any
+	if strings.TrimSpace(masterKey) != "" {
+		masterArg = masterKey
+	}
+	var posterArg any
+	if strings.TrimSpace(posterKey) != "" {
+		posterArg = posterKey
+	}
+	return a.callExec(ctx, "transcode_finish", jobID, status, errArg, masterArg, posterArg)
+}
+
+func (a *app) getVideoSourceKey(ctx context.Context, videoID string) (string, error) {
+	var key string
+	err := a.db.QueryRow(ctx, "SELECT COALESCE(source_storage_key, '') FROM videos WHERE id=$1::uuid", videoID).Scan(&key)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", nil
+	}
+	return key, err
+}
+
+func (a *app) probeMediaInfo(inputPath string) (durationSec, width, height int) {
+	type ffprobeOutput struct {
+		Streams []struct {
+			CodecType string `json:"codec_type"`
+			Width     int    `json:"width"`
+			Height    int    `json:"height"`
+		} `json:"streams"`
+		Format struct {
+			Duration string `json:"duration"`
+		} `json:"format"`
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(
+		ctx,
+		a.ffprobeBin,
+		"-v", "error",
+		"-print_format", "json",
+		"-show_streams",
+		"-show_format",
+		inputPath,
+	).CombinedOutput()
+	if err != nil {
+		return 0, 0, 0
+	}
+	var p ffprobeOutput
+	if jsonErr := json.Unmarshal(out, &p); jsonErr != nil {
+		return 0, 0, 0
+	}
+	if p.Format.Duration != "" {
+		if f, convErr := strconv.ParseFloat(p.Format.Duration, 64); convErr == nil && f > 0 {
+			durationSec = int(f + 0.5)
+		}
+	}
+	for _, s := range p.Streams {
+		if s.CodecType == "video" {
+			width = s.Width
+			height = s.Height
+			break
+		}
+	}
+	return durationSec, width, height
+}
+
+func runCommand(timeout time.Duration, bin string, args ...string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, bin, args...).CombinedOutput()
+	if err != nil {
+		msg := strings.TrimSpace(string(out))
+		if msg == "" {
+			msg = err.Error()
+		}
+		return fmt.Errorf("%s failed: %s", bin, msg)
+	}
+	return nil
 }
 
 func (a *app) optionalAuth(next http.Handler) http.Handler {
@@ -2123,6 +2494,40 @@ func nilIfPtr(v *string) any {
 		return nil
 	}
 	return s
+}
+
+func nilIfEmpty(v string) any {
+	s := strings.TrimSpace(v)
+	if s == "" {
+		return nil
+	}
+	return s
+}
+
+func intOrNil(v int) any {
+	if v <= 0 {
+		return nil
+	}
+	return v
+}
+
+func intJSON(v int) string {
+	if v <= 0 {
+		return "null"
+	}
+	return strconv.Itoa(v)
+}
+
+func sanitizeFilename(name string) string {
+	base := filepath.Base(strings.TrimSpace(name))
+	base = strings.ReplaceAll(base, "\\", "_")
+	base = strings.ReplaceAll(base, "/", "_")
+	base = strings.ReplaceAll(base, "..", "_")
+	base = strings.TrimSpace(base)
+	if base == "." || base == "" {
+		return ""
+	}
+	return base
 }
 
 func isJSONBoolFalse(raw json.RawMessage) bool {

@@ -137,6 +137,16 @@
   transform: translateY(-1px);
 }
 
+select.input {
+  color: var(--ui-fg-1);
+  background: linear-gradient(145deg, var(--glass-1), var(--glass-2));
+}
+
+select.input option {
+  color: var(--text);
+  background-color: var(--panel);
+}
+
 .btn-wide {
   width: 100%;
   justify-content: center;

@@ -516,15 +516,6 @@ watch(
   min-height: 42px;
 }
 
-select.input {
-  color: var(--ui-fg-1);
-}
-
-select.input option {
-  color: var(--text);
-  background-color: var(--panel);
-}
-
 @media (max-width: 1100px) {
   .layout {
     grid-template-columns: 1fr;

@@ -71,7 +71,7 @@
 
       <!-- Actions -->
       <div class="actions">
-        <button class="btn btn-primary btn-lg" type="submit" :disabled="uploading">
+        <button class="btn btn-primary btn-lg" type="submit" :disabled="uploading || !file">
           {{ uploading ? "Uploading…" : "Upload" }}
         </button>
 
@@ -85,7 +85,7 @@
 
 <script setup>
 import { ref } from "vue"
-import http from "../lib/http"
+import videosService from "../services/videosService"
 import { useRouter } from "vue-router"
 
 const title = ref("")
@@ -122,16 +122,22 @@ async function upload() {
     alert("Title is required")
     return
   }
+  if (!file.value) {
+    alert("Video file is required")
+    return
+  }
 
   uploading.value = true
 
   try {
-    await http.post("/videos", {
-      title: title.value.trim(),
-      description: description.value.trim() || null,
-      visibility: visibility.value
-    })
-    alert("Video card created. File upload pipeline will be connected in next step.")
+    const form = new FormData()
+    form.append("title", title.value.trim())
+    form.append("description", description.value.trim())
+    form.append("visibility", visibility.value)
+    form.append("file", file.value)
+
+    await videosService.uploadVideo(form)
+    alert("Upload accepted. Status moved to processing.")
     router.push({ name: "gallery" })
   } catch (err) {
     console.error("Upload failed:", err)

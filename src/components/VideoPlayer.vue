@@ -5,6 +5,7 @@
       :poster="poster"
       controls
       playsinline
+      crossorigin="use-credentials"
       :muted="muted"
       class="video-player__el"
       @play="$emit('play')"
@@ -96,7 +97,17 @@ function attach() {
 
   // HLS.js
   if (isHls.value && !canPlayNativeHls && Hls.isSupported()) {
-    hls = new Hls()
+    hls = new Hls({
+      xhrSetup: (xhr) => {
+        xhr.withCredentials = true
+      },
+      fetchSetup: (context, init) => {
+        return new Request(context.url, {
+          ...init,
+          credentials: 'include'
+        })
+      }
+    })
 
     onHlsError = (event, data) => {
       emit('error', { event, data })
