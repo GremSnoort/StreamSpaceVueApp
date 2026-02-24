@@ -41,6 +41,7 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f backend/migrations/163_transcoding_as
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f backend/migrations/164_social_write_extras.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f backend/migrations/165_feed_hot_functions.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f backend/migrations/166_video_stream_access_functions.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f backend/migrations/167_additional_read_functions.sql
 ```
 
 ```bash
