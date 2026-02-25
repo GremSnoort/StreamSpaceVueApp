@@ -9,6 +9,14 @@
 - Все id: UUID.
 - Пагинация: cursor-based там, где уже есть keyset-функции в БД; иначе `limit/offset`.
 
+## 1.1 Security notes
+
+- Browser cookie session:
+  - `session_token` (httpOnly) + `csrf_token` cookie.
+  - Для mutating-методов (`POST/PUT/PATCH/DELETE`) клиент обязан отправлять `X-CSRF-Token` со значением `csrf_token`.
+- CORS: origin должен входить в `CORS_ALLOWED_ORIGINS`.
+- Rate limit: базовый per-IP лимит на уровне HTTP middleware (`RATE_LIMIT_PER_MINUTE`).
+
 ## 2. Auth
 
 ## POST `/auth/register`

@@ -1,6 +1,6 @@
 <template>
-  <div class="favorites-view">
-    <header class="favorites-header">
+  <div class="page panel gallery favorites-view">
+    <header class="gallery-header favorites-header">
       <div>
         <h1 class="title">Favorites</h1>
         <p class="subtitle">Favorites grouped by folders with drag & drop between folders.</p>
@@ -457,15 +457,28 @@ onMounted(loadFavorites)
 
 <style scoped>
 .favorites-view {
-  padding: 28px;
+  width: 100%;
 }
 
-.favorites-header {
+.gallery-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
   gap: 12px;
   margin-bottom: 16px;
+  position: sticky;
+  top: 88px;
+  z-index: 30;
+  padding: 10px 0 12px;
+  border-bottom: 1px solid var(--border);
+  background:
+    linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--panel) 96%, transparent) 0%,
+      color-mix(in srgb, var(--panel) 84%, transparent) 72%,
+      transparent 100%
+    );
+  backdrop-filter: blur(6px);
 }
 
 .subtitle {
@@ -700,8 +713,14 @@ onMounted(loadFavorites)
 }
 
 @media (max-width: 1000px) {
-  .favorites-header {
+  .gallery-header {
     flex-direction: column;
+    position: static;
+    top: auto;
+    padding: 0;
+    border-bottom: 0;
+    background: transparent;
+    backdrop-filter: none;
   }
 
   .header-actions {

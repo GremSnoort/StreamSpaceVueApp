@@ -11,6 +11,24 @@ This service is a thin HTTP API over PostgreSQL functions from `backend/migratio
 
 - `DATABASE_URL` (default: `postgres://app@localhost:5432/app?sslmode=disable`)
 - `PORT` (default: `8080`)
+- `CORS_ALLOWED_ORIGINS` (default: `http://localhost:5173,http://127.0.0.1:5173`)
+- `COOKIE_SECURE` (default: `false`)
+- `RATE_LIMIT_PER_MINUTE` (default: `240`)
+- `UPLOAD_MAX_BYTES` (default: `536870912`, i.e. `512MB`)
+- `STORAGE_ROOT` (default: `../uploads`)
+- `TRANSCODE_WORKER_ENABLED` (default: `true`)
+- `TRANSCODE_WORKER_ID` (default: `api-worker-1`)
+- `FFMPEG_BIN` (default: `ffmpeg`)
+- `FFPROBE_BIN` (default: `ffprobe`)
+- `INTERNAL_API_TOKEN` (optional, protects `/internal/*`)
+
+## Database setup
+
+Apply migrations before starting backend.
+
+Use:
+
+- `backend/migrations/README.md` for full migration order and local PostgreSQL bootstrap.
 
 ## Run
 
@@ -35,6 +53,11 @@ Auth token sources:
 - `Authorization: Bearer <session_token>`
 - `X-Session-Token: <session_token>`
 - cookie `session_token`
+
+For browser cookie sessions, mutating methods also require CSRF header:
+
+- Header: `X-CSRF-Token`
+- Cookie: `csrf_token`
 
 ### Universal Fat DB RPC
 
@@ -98,10 +121,14 @@ Implemented first wave:
 - `GET|POST /me/folders/{folderId}/videos`
 - `DELETE /me/folders/{folderId}/videos/{videoId}`
 - `POST /me/folders/{folderId}/videos/{videoId}/move`
+- `GET /me/favorites/all`
 - `POST /videos`
+- `POST /videos/upload`
 - `GET|PATCH|DELETE /videos/{videoId}`
 - `POST /videos/{videoId}/publish`
 - `POST /videos/{videoId}/unpublish`
+- `GET /videos/{videoId}/playback`
+- `GET /videos/{videoId}/download`
 - `GET /me/videos`
 - `GET /users/{userId}/videos`
 - `GET|PUT /videos/{videoId}/reaction`

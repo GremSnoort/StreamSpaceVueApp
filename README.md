@@ -1,23 +1,46 @@
 # StreamSpaceVueApp
-Video player web app
 
-# Run demo
+Frontend (Vue + Vite) for StreamSpace.  
+Backend is in `./backend` (Go + PostgreSQL Fat DB).
 
-Setup:
+## Frontend run
+
+Install dependencies:
+
 ```bash
 npm install
 ```
 
-Start server:
+Start dev server:
+
 ```bash
-node server.js
+npm run dev -- --host 0.0.0.0 --port 5173
 ```
 
-Start web:
+Frontend URL:
+
+- `http://localhost:5173`
+
+Backend API base for frontend is read from `.env`:
+
+- `VITE_API_BASE=http://localhost:8080`
+
+## Build
+
 ```bash
-npm run dev
+npm run build
 ```
 
-# Free HLS
+## Backend quick start
 
-https://ottverse.com/free-hls-m3u8-test-urls/
+1. Apply DB migrations (see `backend/migrations/README.md`).
+2. Run backend:
+
+```bash
+cd backend
+go run ./cmd/api
+```
+
+Backend health endpoint:
+
+- `http://localhost:8080/healthz`

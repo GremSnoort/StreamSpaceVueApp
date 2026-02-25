@@ -48,6 +48,7 @@ The application layer is expected to call DB functions as the primary business A
 - Favorites helpers: `161_favorites_functions.sql`
 - Library wrappers: `162_video_library_functions.sql`
 - Stream/download helpers: `166_video_stream_access_functions.sql`
+- Favorites aggregated read: `168_favorites_list_all.sql`
 
 ## 3. Data Model and Invariants
 
@@ -159,6 +160,7 @@ Library wrappers:
 - `favorites_get_or_create_root`
 - `favorites_add_video`, `favorites_remove_video`, `favorites_move_video`
 - `favorites_is_video_saved`, `favorites_list_videos`
+- `favorites_list_all`
 
 ### 5.6 Social
 
@@ -241,6 +243,7 @@ Used patterns:
 - Remove: `favorites_remove_video`
 - Move: `favorites_move_video`
 - Read: `favorites_list_videos`
+- Read (aggregated across whole favorites tree): `favorites_list_all`
 
 ### 7.5 Paid download
 
@@ -256,4 +259,3 @@ Used patterns:
 - Business constraints are mostly fail-fast via `RAISE EXCEPTION` with explicit messages.
 - Denormalized counters (`views_count`, `likes_count`, `comments_count`) are maintained in write functions.
 - Some feed APIs use offset pagination; if datasets grow significantly, consider keyset variants.
-

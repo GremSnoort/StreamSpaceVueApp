@@ -888,6 +888,19 @@ onUnmounted(() => {
   justify-content: space-between;
   gap: var(--space-4);
   margin-bottom: var(--space-5);
+  position: sticky;
+  top: 88px;
+  z-index: 30;
+  padding: 10px 0 12px;
+  border-bottom: 1px solid var(--border);
+  background:
+    linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--panel) 96%, transparent) 0%,
+      color-mix(in srgb, var(--panel) 84%, transparent) 72%,
+      transparent 100%
+    );
+  backdrop-filter: blur(6px);
 }
 
 .subtitle {
@@ -1157,6 +1170,12 @@ onUnmounted(() => {
 @media (max-width: 1000px) {
   .gallery-header {
     flex-direction: column;
+    position: static;
+    top: auto;
+    padding: 0;
+    border-bottom: 0;
+    background: transparent;
+    backdrop-filter: none;
   }
 
   .header-actions {

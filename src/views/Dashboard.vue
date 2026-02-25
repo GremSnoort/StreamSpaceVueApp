@@ -86,6 +86,11 @@ watch(
   flex-direction: column;
   border-right: 1px solid var(--border);
   border-radius: 0; /* чтобы стык с контентом был ровный (если хочешь) */
+  position: sticky;
+  top: 88px;
+  align-self: flex-start;
+  max-height: calc(100vh - 96px);
+  overflow: auto;
 }
 
 .dash-menu {
@@ -178,6 +183,10 @@ watch(
     width: 100%;
     border-right: none;
     border-bottom: 1px solid var(--border);
+    position: static;
+    top: auto;
+    max-height: none;
+    overflow: visible;
   }
 
   .dash-link.is-active::before {

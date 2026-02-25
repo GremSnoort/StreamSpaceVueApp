@@ -2,8 +2,10 @@
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useAuthStore } from './stores/auth'
 import { useTheme } from '@/composables/useTheme'
+import { useRouter } from 'vue-router'
 
 const auth = useAuthStore()
+const router = useRouter()
 const { theme, toggle } = useTheme()
 
 const menuOpen = ref(false)
@@ -18,8 +20,9 @@ function closeMenu() {
   menuOpen.value = false
 }
 
-function logout() {
-  auth.logout()
+async function logout() {
+  await auth.logout()
+  await router.replace('/login')
   closeMenu()
 }
 
