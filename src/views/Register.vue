@@ -6,6 +6,7 @@ import { useRouter } from 'vue-router'
 const email = ref('')
 const username = ref('')
 const password = ref('')
+const showPassword = ref(false)
 const errorText = ref('')
 const pending = ref(false)
 const auth = useAuthStore()
@@ -55,13 +56,24 @@ async function submit() {
 
         <label class="field">
           <span class="field-label">Password</span>
-          <input
-            v-model="password"
-            type="password"
-            autocomplete="new-password"
-            placeholder="••••••••"
-            class="input"
-          />
+          <div class="password-wrap">
+            <input
+              v-model="password"
+              :type="showPassword ? 'text' : 'password'"
+              autocomplete="new-password"
+              placeholder="••••••••"
+              class="input password-input"
+            />
+            <button
+              type="button"
+              class="password-toggle"
+              :aria-label="showPassword ? 'Hide password' : 'Show password'"
+              :title="showPassword ? 'Hide password' : 'Show password'"
+              @click="showPassword = !showPassword"
+            >
+              {{ showPassword ? '🙈' : '👁' }}
+            </button>
+          </div>
         </label>
 
         <p v-if="errorText" class="auth-error">{{ errorText }}</p>
@@ -84,5 +96,34 @@ async function submit() {
   margin: 0;
   color: var(--text-error);
   font-size: 14px;
+}
+
+.password-wrap {
+  position: relative;
+}
+
+.password-input {
+  padding-right: 44px;
+}
+
+.password-toggle {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  border: 0;
+  background: transparent;
+  color: var(--ui-fg-1);
+  cursor: pointer;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.password-toggle:hover {
+  background: var(--ui-surface-1);
 }
 </style>
