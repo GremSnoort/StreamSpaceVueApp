@@ -125,6 +125,7 @@ backend/migrations/164_social_write_extras.sql
 backend/migrations/165_feed_hot_functions.sql
 backend/migrations/166_video_stream_access_functions.sql
 backend/migrations/167_additional_read_functions.sql
+backend/migrations/168_favorites_list_all.sql
 MIGS
 }
 

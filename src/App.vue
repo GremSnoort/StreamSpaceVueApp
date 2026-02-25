@@ -31,6 +31,8 @@ function onScroll() {
 }
 
 onMounted(() => {
+  // Ensure session+CSRF cookies are synchronized even when user is restored from localStorage.
+  auth.tryRestoreSession().catch(() => {})
   window.addEventListener('scroll', onScroll)
 })
 
@@ -40,6 +42,22 @@ onUnmounted(() => {
 
 // CHECK AUTH STATE
 const isLoggedIn = computed(() => !!auth.user)
+const userLabel = computed(() => {
+  const username = String(auth.user?.username || '').trim()
+  if (username) return `@${username}`
+  const email = String(auth.user?.email || '').trim()
+  if (email) return email
+  return 'User'
+})
+const userAvatarUrl = computed(() => String(auth.user?.avatar_url || '').trim())
+const userInitials = computed(() => {
+  const base =
+    String(auth.user?.display_name || '').trim() ||
+    String(auth.user?.username || '').trim() ||
+    String(auth.user?.email || '').trim() ||
+    'U'
+  return base.slice(0, 1).toUpperCase()
+})
 </script>
 
 <template>
@@ -75,6 +93,18 @@ const isLoggedIn = computed(() => !!auth.user)
           class="nav-link"
         >
           Dashboard
+        </router-link>
+
+        <router-link
+          v-if="isLoggedIn"
+          @click="closeMenu"
+          to="/dashboard/profile"
+          class="nav-user"
+          title="My profile"
+        >
+          <img v-if="userAvatarUrl" class="nav-user-avatar" :src="userAvatarUrl" alt="User avatar" />
+          <span v-else class="nav-user-avatar nav-user-avatar-fallback">{{ userInitials }}</span>
+          <span class="nav-user-label">{{ userLabel }}</span>
         </router-link>
 
         <router-link

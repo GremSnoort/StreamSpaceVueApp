@@ -177,7 +177,7 @@ function onTimeUpdate(e) {
   left: 12px;
   bottom: 12px;
   background: rgba(255, 0, 0, 0.08);
-  color: #ffdddd;
+  color: var(--text-error);
   padding: 6px 10px;
   border-radius: 999px;
   font-size: 13px;

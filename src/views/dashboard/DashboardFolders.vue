@@ -501,7 +501,7 @@ watch(
 }
 
 .error {
-  color: #ff8f8f;
+  color: var(--text-error);
 }
 
 .section-title {

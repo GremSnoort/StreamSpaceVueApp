@@ -332,6 +332,15 @@ DB:
 - если `folderId` есть: `folder_list_videos(folderId, me, ...)`
 - иначе: `favorites_list_videos(me, ...)`
 
+## GET `/me/favorites/all`
+
+- query: `limit`, `cursorAddedAt`, `cursorVideoId`
+- purpose: единый список favorites по всему дереву favorites (без N вызовов по папкам)
+
+DB:
+
+- `favorites_list_all(me, limit, cursorAddedAt, cursorVideoId)`
+
 ## PUT `/me/favorites/{videoId}`
 
 - body: `{ "folderId"?: uuid, "orderIndex"?: int }`
@@ -359,6 +368,7 @@ DB:
 ## POST `/videos/{videoId}/purchase-download`
 
 - body: `{ "provider": "stripe", "providerPaymentId": "...", "amountCents": 100, "currency": "USD" }`
+- note: для локального smoke/demo можно передать `provider: "demo"`; backend сразу ставит покупку в `paid`.
 
 DB:
 
@@ -398,7 +408,9 @@ DB:
 
 ## GET `/videos/{videoId}/download`
 
-- query: `token=...` (для one-time flow)
+- query:
+  - `token=...` (one-time flow)
+  - `mode=file` (вернуть файл как attachment; без `mode=file` возвращается JSON c `sourceKey`)
 
 DB orchestration:
 

@@ -11,7 +11,8 @@ import GalleryPage from "./views/GalleryPage.vue";
 import Upload from "./views/Upload.vue";
 import DashboardOverview from "./views/dashboard/DashboardOverview.vue";
 import DashboardProfile from "./views/dashboard/DashboardProfile.vue";
-import DashboardFolders from "./views/dashboard/DashboardFolders.vue";
+import FavoritesGallery from "./views/dashboard/FavoritesGallery.vue";
+import UserProfilePage from "./views/UserProfilePage.vue";
 
 const router = createRouter({
   history: createWebHistory(),
@@ -32,6 +33,12 @@ const router = createRouter({
       component: PlayerPage,
       props: true
     },
+    {
+      name: "user-profile",
+      path: "/users/:id",
+      component: UserProfilePage,
+      props: true
+    },
 
     {
       name: "upload",
@@ -48,9 +55,10 @@ const router = createRouter({
       children: [
         { path: "", redirect: { name: "dashboard-overview" } },
         { name: "dashboard-overview", path: "overview", component: DashboardOverview },
-        { name: "dashboard-library", path: "library", component: DashboardFolders, props: { treeType: "library", title: "Library Folders" } },
-        { name: "dashboard-favorites", path: "favorites", component: DashboardFolders, props: { treeType: "favorites", title: "Favorites Folders" } },
-        { name: "dashboard-videos", path: "videos", component: UserGallery },
+        { name: "dashboard-library", path: "library", component: UserGallery },
+        { name: "dashboard-favorites", path: "favorites", component: FavoritesGallery },
+        { name: "dashboard-favorites-folders", path: "favorites-folders", redirect: { name: "dashboard-favorites" } },
+        { name: "dashboard-videos", path: "videos", redirect: { name: "dashboard-library" } },
         { name: "dashboard-upload", path: "upload", component: Upload },
         { name: "dashboard-profile", path: "profile", component: DashboardProfile }
       ]

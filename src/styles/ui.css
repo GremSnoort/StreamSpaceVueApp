@@ -57,24 +57,24 @@
 }
 
 .btn-primary {
-  color: #fff;
+  color: var(--text-on-accent);
   background: linear-gradient(90deg, var(--primary), var(--primary-2));
   box-shadow: 0 0 12px rgba(71, 125, 255, 0.35);
 }
 
 .btn-secondary {
-  background: #2a2a2a;
-  color: #d6d6d6;
-  border: 1px solid #3a3a3a;
+  background: var(--btn-secondary-bg);
+  color: var(--btn-secondary-fg);
+  border: 1px solid var(--btn-secondary-border);
 }
 
 .btn-secondary:hover {
-  background: #353535;
+  background: var(--btn-secondary-bg-hover);
 }
 
 .btn-danger {
   background: #8d1a1a;
-  color: #fff;
+  color: var(--text-on-accent);
   border: 1px solid #aa2b2b;
 }
 
@@ -97,7 +97,7 @@
   font-size: 28px;
   font-weight: 800;
   text-align: center;
-  color: #cfe8ff;
+  color: var(--text-hero);
 }
 
 .auth-form {
@@ -158,12 +158,12 @@ select.input option {
 .auth-footer {
   margin: var(--space-5) 0 0;
   text-align: center;
-  color: rgba(255, 255, 255, 0.72);
+  color: var(--text-soft);
   font-size: 14px;
 }
 
 .auth-link {
-  color: #9fd4ff;
+  color: var(--text-link-accent);
   font-weight: 700;
   text-decoration: none;
 }
@@ -365,6 +365,49 @@ select.input option {
   width: 100%;
 }
 
+.nav-user {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+  color: var(--nav-link);
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--ui-border-med);
+  background: color-mix(in srgb, var(--nav-bg) 70%, transparent);
+  transition: color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+
+.nav-user:hover {
+  color: var(--nav-link-hover);
+  border-color: var(--ui-border-strong);
+  transform: translateY(-1px);
+}
+
+.nav-user-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid var(--ui-border-med);
+}
+
+.nav-user-avatar-fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-on-accent);
+  background: linear-gradient(135deg, var(--nav-underline-1), var(--nav-underline-2));
+}
+
+.nav-user-label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1;
+}
+
 /* hamburger */
 .hamburger {
   display: none;
@@ -427,6 +470,11 @@ select.input option {
     padding: 12px 0;
     text-align: center;
     border-radius: 0;
+  }
+
+  .nav-user {
+    justify-content: center;
+    margin: 4px 0;
   }
 }
 

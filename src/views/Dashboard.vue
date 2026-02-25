@@ -6,9 +6,9 @@ import { useRouter } from 'vue-router'
 const auth = useAuthStore()
 const router = useRouter()
 
-function logout() {
-  auth.logout()
-  router.replace('/login')
+async function logout() {
+  await auth.logout()
+  await router.replace('/login')
 }
 
 watch(
@@ -31,12 +31,8 @@ watch(
           📊 Overview
         </RouterLink>
 
-        <RouterLink to="/dashboard/videos" class="dash-link" active-class="is-active">
-          🎞 My Videos
-        </RouterLink>
-
         <RouterLink to="/dashboard/library" class="dash-link" active-class="is-active">
-          🗂 Library
+          🗂 Library & Videos
         </RouterLink>
 
         <RouterLink to="/dashboard/favorites" class="dash-link" active-class="is-active">
@@ -125,7 +121,7 @@ watch(
 }
 
 .dash-link.is-active {
-  color: #fff;
+  color: var(--text-on-accent);
   background: linear-gradient(90deg, var(--primary), var(--primary-2));
   box-shadow: var(--shadow-md);
 }

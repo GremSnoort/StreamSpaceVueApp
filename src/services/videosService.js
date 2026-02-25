@@ -23,8 +23,23 @@ export default {
     return Array.isArray(data?.items) ? data.items : [];
   },
 
+  async listUserVideos(userId, limit = 200, offset = 0) {
+    const { data } = await http.get(`/users/${userId}/videos`, { params: { limit, offset } });
+    return Array.isArray(data?.items) ? data.items : [];
+  },
+
   async listHot(limit = 100, offset = 0, window = "48 hours") {
     const { data } = await http.get("/feed/hot", { params: { limit, offset, window } });
+    return Array.isArray(data?.items) ? data.items : [];
+  },
+
+  async listFollowing(limit = 100, offset = 0) {
+    const { data } = await http.get("/feed/following", { params: { limit, offset } });
+    return Array.isArray(data?.items) ? data.items : [];
+  },
+
+  async listCombined(limit = 100, offset = 0, window = "48 hours") {
+    const { data } = await http.get("/feed", { params: { limit, offset, window } });
     return Array.isArray(data?.items) ? data.items : [];
   },
 

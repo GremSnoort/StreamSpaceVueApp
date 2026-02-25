@@ -1,123 +1,208 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import http from '../../lib/http'
+import videosService from '../../services/videosService'
+import foldersService from '../../services/foldersService'
+import usersService from '../../services/usersService'
 
-const stats = ref({
-  videos: 0,
-  storage: '—',
-  lastUpload: '—'
-})
+const router = useRouter()
 
-onMounted(async () => {
-  try {
-    const res = await http.get('/me/videos')
-    const media = Array.isArray(res.data?.items) ? res.data.items : []
+const loading = ref(true)
+const errorText = ref('')
 
-    stats.value.videos = media.length
+const myVideos = ref([])
+const favoriteItems = ref([])
+const favoritesTree = ref([])
+const following = ref([])
+const followers = ref([])
+const purchases = ref([])
 
-    if (media.length) {
-      const last = media[media.length - 1]
-      stats.value.lastUpload = new Date(last.created_at).toLocaleDateString()
-    }
+const apiBase = (import.meta.env.VITE_API_BASE || 'http://localhost:8080').replace(/\/+$/, '')
+const fallbackPoster = 'https://placehold.co/640x360?text=No+Poster'
 
-    stats.value.storage = `${(media.length * 42).toFixed(1)} MB`
-  } catch (e) {
-    console.error('Failed to load dashboard stats', e)
+const videoSummary = computed(() => {
+  const list = myVideos.value
+  return {
+    total: list.length,
+    ready: list.filter((v) => v.status === 'ready').length,
+    processing: list.filter((v) => v.status === 'processing' || v.status === 'uploading').length,
+    failed: list.filter((v) => v.status === 'failed').length,
+    published: list.filter((v) => !!v.published_at).length,
+    privateCount: list.filter((v) => v.visibility === 'private').length,
+    protectedCount: list.filter((v) => v.visibility === 'protected').length,
+    publicCount: list.filter((v) => v.visibility === 'public').length
   }
 })
 
-function addToFavourites(video) {
-  if (!favourites.value.find(v => v.id === video.id)) {
-    favourites.value.push(video)
+const favoritesSummary = computed(() => {
+  const unique = new Set(
+    favoriteItems.value
+      .map((v) => String(v.video_id || v.id || '').trim())
+      .filter(Boolean)
+  )
+  return {
+    folders: favoritesTree.value.length,
+    items: unique.size,
+    withVideos: favoritesTree.value.filter((f) => Number(f.videos_count || 0) > 0).length
+  }
+})
+
+const recentUploads = computed(() => myVideos.value.slice(0, 8))
+const recentFavorites = computed(() => favoriteItems.value.slice(0, 6))
+const recentPurchases = computed(() => purchases.value.slice(0, 8))
+
+function posterUrl(video) {
+  const key = video?.poster_key
+  const id = video?.id || video?.video_id
+  if (!key || !id) return fallbackPoster
+  if (String(key).startsWith('http')) return key
+  const name = String(key).split('/').pop()
+  return `${apiBase}/stream/hls/${id}/${name}`
+}
+
+function goPlay(videoId) {
+  router.push({ name: 'player', params: { id: videoId } })
+}
+
+async function loadOverview() {
+  loading.value = true
+  errorText.value = ''
+  try {
+    const [videos, favAllRes, favTree, fwing, fwers, purchasesRes] = await Promise.all([
+      videosService.listMyVideos(300, 0),
+      http.get('/me/favorites/all', { params: { limit: 300 } }),
+      foldersService.listTree('favorites'),
+      usersService.listFollowing(200),
+      usersService.listFollowers(200),
+      http.get('/me/purchases', { params: { limit: 100, offset: 0 } })
+    ])
+
+    myVideos.value = videos
+    favoritesTree.value = favTree
+    favoriteItems.value = Array.isArray(favAllRes.data?.items) ? favAllRes.data.items : []
+    following.value = fwing
+    followers.value = fwers
+    purchases.value = Array.isArray(purchasesRes.data?.items) ? purchasesRes.data.items : []
+  } catch (err) {
+    errorText.value = err?.response?.data?.message || 'Failed to load dashboard overview'
+    myVideos.value = []
+    favoriteItems.value = []
+    favoritesTree.value = []
+    following.value = []
+    followers.value = []
+    purchases.value = []
+  } finally {
+    loading.value = false
   }
 }
 
-const favourites = ref([
-  { id: 1, title: 'My Travel Vlog', thumbnail: 'https://placehold.co/320x180?text=Video+1' },
-  { id: 2, title: 'Vue Upload Demo', thumbnail: 'https://placehold.co/320x180?text=Video+2' }
-])
-
-const recommendations = ref([
-  { id: 101, title: 'Top Vue Tips', thumbnail: 'https://placehold.co/320x180?text=Recommended+1' },
-  { id: 102, title: 'Express Upload Guide', thumbnail: 'https://placehold.co/320x180?text=Recommended+2' },
-  { id: 103, title: 'Streaming Architecture', thumbnail: 'https://placehold.co/320x180?text=Recommended+3' }
-])
+onMounted(loadOverview)
 </script>
 
 <template>
   <section class="overview">
     <header class="overview-header">
       <h1 class="overview-title">Dashboard</h1>
-      <p class="overview-subtitle">Your content at a glance</p>
+      <p class="overview-subtitle">Operational snapshot from live data.</p>
+      <button class="btn btn-secondary" :disabled="loading" @click="loadOverview">↻ Refresh</button>
     </header>
 
-    <!-- STATS -->
-    <div class="grid stats-grid">
-      <div class="panel stat-card">
-        <span class="stat-icon">🎞</span>
-        <div>
-          <p class="stat-label">Videos</p>
-          <p class="stat-value">{{ stats.videos }}</p>
+    <p v-if="errorText" class="error">{{ errorText }}</p>
+
+    <div v-if="loading" class="muted">Loading overview…</div>
+
+    <div v-else class="grid sections-grid">
+      <section class="panel section-card">
+        <h3 class="section-title">My Videos Summary</h3>
+        <div class="summary-grid">
+          <div class="summary-cell"><span>Total</span><strong>{{ videoSummary.total }}</strong></div>
+          <div class="summary-cell"><span>Ready</span><strong>{{ videoSummary.ready }}</strong></div>
+          <div class="summary-cell"><span>Processing</span><strong>{{ videoSummary.processing }}</strong></div>
+          <div class="summary-cell"><span>Failed</span><strong>{{ videoSummary.failed }}</strong></div>
+          <div class="summary-cell"><span>Published</span><strong>{{ videoSummary.published }}</strong></div>
+          <div class="summary-cell"><span>Private</span><strong>{{ videoSummary.privateCount }}</strong></div>
+          <div class="summary-cell"><span>Protected</span><strong>{{ videoSummary.protectedCount }}</strong></div>
+          <div class="summary-cell"><span>Public</span><strong>{{ videoSummary.publicCount }}</strong></div>
         </div>
-      </div>
-
-      <div class="panel stat-card">
-        <span class="stat-icon">💾</span>
-        <div>
-          <p class="stat-label">Storage used</p>
-          <p class="stat-value">{{ stats.storage }}</p>
-        </div>
-      </div>
-
-      <div class="panel stat-card">
-        <span class="stat-icon">⏱</span>
-        <div>
-          <p class="stat-label">Last upload</p>
-          <p class="stat-value">{{ stats.lastUpload }}</p>
-        </div>
-      </div>
-    </div>
-
-    <!-- EXTRAS -->
-    <div class="grid extras-grid">
-      <!-- FAVOURITES -->
-      <section class="panel extra-card">
-        <h3 class="extra-title">⭐ Favourites</h3>
-
-        <div v-if="favourites.length" class="grid thumbs-grid">
-          <article v-for="v in favourites" :key="v.id" class="thumb-card">
-            <img class="thumb-img" :src="v.thumbnail" alt="thumbnail" loading="lazy" />
-            <div class="thumb-title" :title="v.title">{{ v.title }}</div>
-          </article>
-        </div>
-
-        <p v-else class="muted">No favourites yet</p>
       </section>
 
-      <!-- RECOMMENDATIONS -->
-      <section class="panel extra-card">
-        <h3 class="extra-title">🔥 Recommendations</h3>
+      <section class="panel section-card">
+        <h3 class="section-title">Favorites Summary</h3>
+        <div class="summary-grid">
+          <div class="summary-cell"><span>Folders</span><strong>{{ favoritesSummary.folders }}</strong></div>
+          <div class="summary-cell"><span>Items</span><strong>{{ favoritesSummary.items }}</strong></div>
+          <div class="summary-cell"><span>Non-empty folders</span><strong>{{ favoritesSummary.withVideos }}</strong></div>
+        </div>
+        <div v-if="recentFavorites.length > 0" class="chips-row">
+          <button
+            v-for="v in recentFavorites"
+            :key="`fav:${v.video_id}`"
+            class="chip"
+            type="button"
+            @click="goPlay(v.video_id)"
+          >
+            {{ v.title || `Video ${v.video_id}` }}
+          </button>
+        </div>
+      </section>
 
-        <div v-if="recommendations.length" class="grid thumbs-grid">
-          <article v-for="v in recommendations" :key="v.id" class="thumb-card">
-            <div class="thumb-wrap">
-              <img class="thumb-img" :src="v.thumbnail" alt="thumbnail" loading="lazy" />
-
-              <button
-                class="btn fav-btn"
-                type="button"
-                @click.stop="addToFavourites(v)"
-                title="Add to favourites"
-              >
-                ❤️
-              </button>
+      <section class="panel section-card section-wide">
+        <h3 class="section-title">Recent Uploads</h3>
+        <div v-if="recentUploads.length === 0" class="muted">No uploads yet.</div>
+        <div v-else class="grid uploads-grid">
+          <article v-for="v in recentUploads" :key="v.id" class="upload-card">
+            <button class="thumb" type="button" @click="goPlay(v.id)">
+              <img class="thumb-img" :src="posterUrl(v)" alt="Preview" loading="lazy" />
+            </button>
+            <div class="upload-body">
+              <strong>{{ v.title }}</strong>
+              <small>{{ v.visibility }} · {{ v.status }} · {{ v.published_at ? 'published' : 'unpublished' }}</small>
             </div>
-
-            <div class="thumb-title" :title="v.title">{{ v.title }}</div>
           </article>
         </div>
+      </section>
 
-        <p v-else class="muted">No recommendations yet</p>
+      <section class="panel section-card">
+        <h3 class="section-title">Subscriptions</h3>
+        <div class="summary-grid">
+          <div class="summary-cell"><span>Following</span><strong>{{ following.length }}</strong></div>
+          <div class="summary-cell"><span>Followers</span><strong>{{ followers.length }}</strong></div>
+        </div>
+        <div class="subs-columns">
+          <div>
+            <p class="mini-title">Following</p>
+            <ul class="mini-list">
+              <li v-for="u in following.slice(0, 5)" :key="`fwing:${u.user_id}`">
+                <RouterLink :to="`/users/${u.user_id}`">@{{ u.username }}</RouterLink>
+              </li>
+            </ul>
+          </div>
+          <div>
+            <p class="mini-title">Followers</p>
+            <ul class="mini-list">
+              <li v-for="u in followers.slice(0, 5)" :key="`fwers:${u.user_id}`">
+                <RouterLink :to="`/users/${u.user_id}`">@{{ u.username }}</RouterLink>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel section-card section-wide">
+        <h3 class="section-title">Purchases</h3>
+        <div v-if="recentPurchases.length === 0" class="muted">No purchases yet.</div>
+        <div v-else class="purchases-list">
+          <div v-for="p in recentPurchases" :key="p.purchase_id" class="purchase-row">
+            <div>
+              <strong>{{ p.video_title || `Video ${p.video_id}` }}</strong>
+              <small>
+                {{ p.status }} · {{ p.amount_cents }} {{ p.currency }} · {{ new Date(p.created_at).toLocaleString() }}
+              </small>
+            </div>
+            <button class="btn btn-secondary" type="button" @click="goPlay(p.video_id)">Open video</button>
+          </div>
+        </div>
       </section>
     </div>
   </section>
@@ -128,108 +213,102 @@ const recommendations = ref([
   padding: var(--space-6);
 }
 
-/* header */
+.overview-header {
+  display: grid;
+  gap: 8px;
+  margin-bottom: var(--space-5);
+}
+
 .overview-title {
-  margin: 0 0 6px;
+  margin: 0;
   font-size: 28px;
   font-weight: 800;
   color: var(--text);
 }
 
-.overview-subtitle {
-  margin: 0 0 var(--space-6);
+.overview-subtitle,
+.muted {
+  margin: 0;
   color: var(--muted);
   font-size: 14px;
   opacity: 0.9;
 }
 
-/* stats */
-.stats-grid {
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 18px;
+.sections-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
 }
 
-.stat-card {
-  padding: 18px;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  box-shadow: var(--shadow-md);
-  transition: transform 0.25s, box-shadow 0.25s;
+.section-card {
+  padding: 16px;
 }
 
-.stat-card:hover {
-  transform: translateY(-3px);
-  box-shadow: var(--shadow-lg);
+.section-wide {
+  grid-column: span 2;
 }
 
-.stat-icon {
-  font-size: 26px;
+.section-title {
+  margin: 0 0 12px;
+  color: var(--ui-fg-1);
 }
 
-.stat-label {
-  margin: 0 0 4px;
-  font-size: 13px;
-  color: var(--muted);
-  opacity: 0.95;
-}
-
-.stat-value {
-  margin: 0;
-  font-size: 22px;
-  font-weight: 800;
-  color: var(--text);
-}
-
-/* extras */
-.extras-grid {
-  margin-top: var(--space-7);
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 18px;
-}
-
-.extra-card {
-  padding: 20px;
-  box-shadow: var(--shadow-md);
-}
-
-.extra-title {
-  margin: 0 0 14px;
-  font-size: 16px;
-  color: var(--nav-link);
-  display: flex;
-  align-items: center;
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
 }
 
-.muted {
-  margin: 0;
-  font-size: 14px;
-  opacity: 0.65;
+.summary-cell {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+  display: grid;
+  gap: 4px;
 }
 
-/* thumbs */
-.thumbs-grid {
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 14px;
+.summary-cell span {
+  color: var(--ui-fg-2);
+  font-size: 12px;
 }
 
-.thumb-card {
-  border-radius: var(--r-md);
-  overflow: hidden;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.10);
-  transition: transform 0.25s, box-shadow 0.25s;
+.summary-cell strong {
+  color: var(--ui-fg-1);
+  font-size: 18px;
+}
+
+.chips-row {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip {
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--ui-fg-1);
+  border-radius: 999px;
+  padding: 6px 10px;
   cursor: pointer;
 }
 
-.thumb-card:hover {
-  transform: translateY(-3px);
-  box-shadow: var(--shadow-lg);
+.uploads-grid {
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
 }
 
-.thumb-wrap {
-  position: relative;
+.upload-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.thumb {
+  width: 100%;
+  border: 0;
+  padding: 0;
+  background: #000;
+  cursor: pointer;
 }
 
 .thumb-img {
@@ -237,38 +316,98 @@ const recommendations = ref([
   aspect-ratio: 16 / 9;
   object-fit: cover;
   display: block;
-  filter: brightness(0.9);
 }
 
-.thumb-title {
+.upload-body {
   padding: 10px;
-  font-size: 13px;
-  color: var(--text);
-  opacity: 0.92;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* fav button */
-.fav-btn {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 34px;
-  height: 34px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(0, 0, 0, 0.55);
   display: grid;
-  place-items: center;
-  padding: 0;
-  opacity: 0;
-  transition: opacity 0.2s, transform 0.2s;
+  gap: 4px;
 }
 
-.thumb-card:hover .fav-btn {
-  opacity: 1;
-  transform: scale(1.06);
+.upload-body strong {
+  color: var(--ui-fg-1);
+}
+
+.upload-body small {
+  color: var(--ui-fg-2);
+}
+
+.subs-columns {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.mini-title {
+  margin: 0 0 6px;
+  color: var(--ui-fg-2);
+  font-size: 12px;
+}
+
+.mini-list {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.mini-list a {
+  color: var(--ui-fg-1);
+  text-decoration: none;
+}
+
+.mini-list a:hover {
+  text-decoration: underline;
+}
+
+.purchases-list {
+  display: grid;
+  gap: 8px;
+}
+
+.purchase-row {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.purchase-row strong {
+  display: block;
+  color: var(--ui-fg-1);
+}
+
+.purchase-row small {
+  color: var(--ui-fg-2);
+}
+
+.error {
+  color: var(--text-error);
+  margin: 0 0 12px;
+}
+
+@media (max-width: 1100px) {
+  .sections-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .section-wide {
+    grid-column: span 1;
+  }
+
+  .summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .subs-columns {
+    grid-template-columns: 1fr;
+  }
+
+  .purchase-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }
 </style>

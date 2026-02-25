@@ -1,6 +1,6 @@
 <template>
   <PageLayout>
-    <UserGallery />
+    <UserGallery mode="discover" />
   </PageLayout>
 </template>
 

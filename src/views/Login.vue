@@ -72,7 +72,7 @@ async function submit() {
 <style scoped>
 .auth-error {
   margin: 0;
-  color: #ff8f8f;
+  color: var(--text-error);
   font-size: 14px;
 }
 </style>

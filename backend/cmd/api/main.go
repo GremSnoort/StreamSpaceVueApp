@@ -2,11 +2,15 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/subtle"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log"
+	"mime"
 	"net"
 	"net/http"
 	"os"
@@ -15,6 +19,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -74,6 +79,20 @@ type app struct {
 	workerID           string
 	ffmpegBin          string
 	ffprobeBin         string
+	rateLimitPerMinute int
+	rateState          *ipRateState
+	maxUploadBytes     int64
+}
+
+type ipRateState struct {
+	mu      sync.Mutex
+	clients map[string]*rateClient
+}
+
+type rateClient struct {
+	count    int
+	windowAt time.Time
+	lastSeen time.Time
 }
 
 func main() {
@@ -101,6 +120,11 @@ func main() {
 		workerID:           envOrDefault("TRANSCODE_WORKER_ID", "api-worker-1"),
 		ffmpegBin:          envOrDefault("FFMPEG_BIN", "ffmpeg"),
 		ffprobeBin:         envOrDefault("FFPROBE_BIN", "ffprobe"),
+		rateLimitPerMinute: envIntDefault("RATE_LIMIT_PER_MINUTE", 240),
+		rateState: &ipRateState{
+			clients: make(map[string]*rateClient),
+		},
+		maxUploadBytes: envInt64Default("UPLOAD_MAX_BYTES", 512<<20),
 	}
 
 	r := chi.NewRouter()
@@ -109,7 +133,9 @@ func main() {
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Logger)
 	r.Use(a.cors)
+	r.Use(a.rateLimit)
 	r.Use(a.optionalAuth)
+	r.Use(a.csrfProtect)
 
 	r.Get("/healthz", a.handleHealth)
 	r.Post("/auth/register", a.handleAuthRegister)
@@ -144,9 +170,10 @@ func main() {
 		r.Post("/folders/{folderId}/videos/{videoId}/move", a.handleMoveVideoBetweenMyFolders)
 
 		r.Get("/favorites", a.handleListMyFavorites)
-		r.Put("/favorites/{videoId}", a.handlePutFavorite)
-		r.Delete("/favorites/{videoId}", a.handleDeleteFavorite)
-		r.Get("/favorites/{videoId}", a.handleGetFavoriteState)
+		r.Get("/favorites/all", a.handleListMyFavoritesAll)
+		r.Put("/favorites/{videoId:[0-9a-fA-F-]{36}}", a.handlePutFavorite)
+		r.Delete("/favorites/{videoId:[0-9a-fA-F-]{36}}", a.handleDeleteFavorite)
+		r.Get("/favorites/{videoId:[0-9a-fA-F-]{36}}", a.handleGetFavoriteState)
 
 		r.Get("/purchases", a.handleListMyPurchases)
 		r.Get("/purchases/{purchaseId}", a.handleGetMyPurchase)
@@ -253,6 +280,7 @@ func buildFunctionRegistry() map[string]fnDef {
 		"folder_list_children":               {Kind: kindTableList, AuthRequired: true, InjectUserArg: &idx0},
 		"folder_list_videos":                 {Kind: kindTableList, AuthRequired: true, InjectUserArg: &idx1},
 		"favorites_list_videos":              {Kind: kindTableList, AuthRequired: true, InjectUserArg: &idx0},
+		"favorites_list_all":                 {Kind: kindTableList, AuthRequired: true, InjectUserArg: &idx0},
 		"folder_rename":                      {Kind: kindScalar, AuthRequired: true, InjectUserArg: &idx1},
 		"folder_move":                        {Kind: kindScalar, AuthRequired: true, InjectUserArg: &idx1},
 		"folder_delete":                      {Kind: kindScalar, AuthRequired: true, InjectUserArg: &idx1},
@@ -331,6 +359,9 @@ func (a *app) handleMe(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		writeError(w, http.StatusUnauthorized, "unauthorized")
 		return
+	}
+	if c, err := r.Cookie("csrf_token"); err != nil || strings.TrimSpace(c.Value) == "" {
+		a.setCSRFCookie(w, time.Now().Add(30*24*time.Hour))
 	}
 	writeJSON(w, http.StatusOK, u)
 }
@@ -467,6 +498,7 @@ func (a *app) handleAuthRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.setSessionCookie(w, sess.Token, sess.ExpiresAt)
+	a.setCSRFCookie(w, sess.ExpiresAt)
 	writeJSON(w, http.StatusCreated, map[string]any{"user": user})
 }
 
@@ -524,6 +556,7 @@ func (a *app) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.setSessionCookie(w, sess.Token, sess.ExpiresAt)
+	a.setCSRFCookie(w, sess.ExpiresAt)
 	writeJSON(w, http.StatusOK, map[string]any{"user": user})
 }
 
@@ -531,11 +564,13 @@ func (a *app) handleAuthLogout(w http.ResponseWriter, r *http.Request) {
 	token := extractSessionToken(r)
 	if token == "" {
 		a.clearSessionCookie(w)
+		a.clearCSRFCookie(w)
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 	_, _ = a.callScalar(r.Context(), "auth_delete_session", token)
 	a.clearSessionCookie(w)
+	a.clearCSRFCookie(w)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -916,7 +951,8 @@ func (a *app) handleVideoUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := r.ParseMultipartForm(512 << 20); err != nil {
+	r.Body = http.MaxBytesReader(w, r.Body, a.maxUploadBytes)
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid multipart form")
 		return
 	}
@@ -966,6 +1002,24 @@ func (a *app) handleVideoUpload(w http.ResponseWriter, r *http.Request) {
 	if safeName == "" {
 		safeName = "source.bin"
 	}
+	ext := strings.ToLower(filepath.Ext(safeName))
+	if !isAllowedUploadExtension(ext) {
+		writeError(w, http.StatusUnsupportedMediaType, "unsupported file extension")
+		return
+	}
+
+	head := make([]byte, 512)
+	n, _ := io.ReadFull(file, head)
+	detectedMime := normalizeDetectedMIME(http.DetectContentType(head[:n]))
+	if !isAllowedUploadMIME(ext, detectedMime) {
+		writeError(w, http.StatusUnsupportedMediaType, "unsupported file mime type")
+		return
+	}
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid uploaded file stream")
+		return
+	}
+
 	sourceKey := path.Join("videos", videoID, "source", safeName)
 	sourceAbsPath := filepath.Join(a.storageRoot, filepath.FromSlash(sourceKey))
 	if err := os.MkdirAll(filepath.Dir(sourceAbsPath), 0o755); err != nil {
@@ -996,7 +1050,7 @@ func (a *app) handleVideoUpload(w http.ResponseWriter, r *http.Request) {
 		 WHERE id=$1::uuid AND owner_id=$6::uuid`,
 		videoID,
 		safeName,
-		nilIfEmpty(header.Header.Get("Content-Type")),
+		detectedMime,
 		written,
 		sourceKey,
 		u.UserID,
@@ -1341,6 +1395,26 @@ func (a *app) handleListMyFavorites(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"items": decodeRawAny(raw)})
 }
 
+func (a *app) handleListMyFavoritesAll(w http.ResponseWriter, r *http.Request) {
+	u, ok := requireUser(w, r)
+	if !ok {
+		return
+	}
+	raw, err := a.callTableList(
+		r.Context(),
+		"favorites_list_all",
+		u.UserID,
+		queryIntDefault(r, "limit", 50),
+		queryStringOrNil(r, "cursorAddedAt"),
+		queryStringOrNil(r, "cursorVideoId"),
+	)
+	if err != nil {
+		a.writeDBError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": decodeRawAny(raw)})
+}
+
 type putFavoriteRequest struct {
 	FolderID   *string `json:"folderId"`
 	OrderIndex *int    `json:"orderIndex"`
@@ -1430,7 +1504,14 @@ func (a *app) handleCreatePurchaseDownload(w http.ResponseWriter, r *http.Reques
 		a.writeDBError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, map[string]any{"purchaseId": decodeRawAny(raw)})
+	purchaseID, _ := decodeRawAny(raw).(string)
+	if strings.EqualFold(strings.TrimSpace(req.Provider), "demo") && purchaseID != "" {
+		if err := a.callExec(r.Context(), "purchase_set_status", purchaseID, "paid"); err != nil {
+			a.writeDBError(w, err)
+			return
+		}
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"purchaseId": purchaseID})
 }
 
 func (a *app) handleListMyPurchases(w http.ResponseWriter, r *http.Request) {
@@ -1665,10 +1746,80 @@ func (a *app) handleGetVideoDownload(w http.ResponseWriter, r *http.Request) {
 	}
 	key, _ := decodeRawAny(raw).(string)
 	if strings.TrimSpace(key) == "" {
-		writeError(w, http.StatusForbidden, "no download rights")
+		// Differentiate ACL denial from missing source file metadata.
+		allowedRaw, allowErr := a.callScalar(r.Context(), "can_download_video", u.UserID, videoID)
+		if allowErr != nil {
+			a.writeDBError(w, allowErr)
+			return
+		}
+		allowed, _ := decodeRawAny(allowedRaw).(bool)
+		if !allowed {
+			writeError(w, http.StatusForbidden, "no download rights")
+			return
+		}
+		writeError(w, http.StatusConflict, "download source is not available yet")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"sourceKey": key})
+
+	if strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("mode")), "file") {
+		a.serveSourceDownload(w, r, videoID, key)
+		return
+	}
+
+	downloadURL := fmt.Sprintf("/videos/%s/download?mode=file", videoID)
+	if token := strings.TrimSpace(r.URL.Query().Get("token")); token != "" {
+		downloadURL += "&token=" + token
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"sourceKey":    key,
+		"downloadUrl":  downloadURL,
+		"downloadMode": "file",
+	})
+}
+
+func (a *app) serveSourceDownload(w http.ResponseWriter, r *http.Request, videoID, sourceKey string) {
+	fsPath := filepath.Join(a.storageRoot, filepath.FromSlash(path.Clean(sourceKey)))
+	if _, err := os.Stat(fsPath); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			writeError(w, http.StatusNotFound, "file not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "cannot access file")
+		return
+	}
+
+	var (
+		originalName string
+		mimeType     string
+	)
+	if err := a.db.QueryRow(
+		r.Context(),
+		`SELECT COALESCE(source_original_name, ''), COALESCE(source_mime_type, '') FROM videos WHERE id=$1::uuid`,
+		videoID,
+	).Scan(&originalName, &mimeType); err != nil {
+		a.writeDBError(w, err)
+		return
+	}
+
+	filename := strings.TrimSpace(originalName)
+	if filename == "" {
+		filename = path.Base(sourceKey)
+	}
+	if filename == "" {
+		filename = "video.bin"
+	}
+
+	if strings.TrimSpace(mimeType) == "" {
+		mimeType = mime.TypeByExtension(strings.ToLower(filepath.Ext(filename)))
+	}
+	if strings.TrimSpace(mimeType) == "" {
+		mimeType = "application/octet-stream"
+	}
+
+	w.Header().Set("Content-Type", mimeType)
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+	w.Header().Set("Cache-Control", "no-store")
+	http.ServeFile(w, r, fsPath)
 }
 
 type purchaseStatusRequest struct {
@@ -2407,7 +2558,7 @@ func parseAllowedOrigins(csv string) map[string]struct{} {
 }
 
 func (a *app) cors(next http.Handler) http.Handler {
-	allowHeaders := "Content-Type, Authorization, X-Session-Token"
+	allowHeaders := "Content-Type, Authorization, X-Session-Token, X-CSRF-Token"
 	allowMethods := "GET, POST, PUT, PATCH, DELETE, OPTIONS"
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := strings.TrimSpace(r.Header.Get("Origin"))
@@ -2424,6 +2575,79 @@ func (a *app) cors(next http.Handler) http.Handler {
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (a *app) rateLimit(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodOptions || strings.HasPrefix(r.URL.Path, "/internal/") || r.URL.Path == "/healthz" {
+			next.ServeHTTP(w, r)
+			return
+		}
+		if a.rateLimitPerMinute <= 0 || a.rateState == nil {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		now := time.Now()
+		ip := clientIP(r)
+		allowed, retryAfter := a.rateState.allow(ip, now, a.rateLimitPerMinute)
+		if !allowed {
+			w.Header().Set("Retry-After", strconv.Itoa(retryAfter))
+			writeError(w, http.StatusTooManyRequests, "rate limit exceeded")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (a *app) csrfProtect(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if isSafeMethod(r.Method) || strings.HasPrefix(r.URL.Path, "/internal/") {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		// For token-based API callers (not cookie session), skip CSRF.
+		if strings.TrimSpace(r.Header.Get("Authorization")) != "" || strings.TrimSpace(r.Header.Get("X-Session-Token")) != "" {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		// CSRF applies only if session cookie is present.
+		sessionCookie, err := r.Cookie("session_token")
+		if err != nil || strings.TrimSpace(sessionCookie.Value) == "" {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		origin := strings.TrimSpace(r.Header.Get("Origin"))
+		if origin != "" {
+			if _, ok := a.corsAllowedOrigins[origin]; !ok {
+				writeError(w, http.StatusForbidden, "csrf origin denied")
+				return
+			}
+		}
+
+		csrfCookie, err := r.Cookie("csrf_token")
+		if err != nil || strings.TrimSpace(csrfCookie.Value) == "" {
+			// Backward-compatible bootstrap for existing cookie sessions created
+			// before CSRF cookie rollout.
+			a.setCSRFCookie(w, time.Now().Add(30*24*time.Hour))
+			next.ServeHTTP(w, r)
+			return
+		}
+		headerToken := strings.TrimSpace(r.Header.Get("X-CSRF-Token"))
+		if headerToken == "" {
+			writeError(w, http.StatusForbidden, "csrf token missing")
+			return
+		}
+		if subtle.ConstantTimeCompare([]byte(csrfCookie.Value), []byte(headerToken)) != 1 {
+			writeError(w, http.StatusForbidden, "csrf token mismatch")
+			return
+		}
+
 		next.ServeHTTP(w, r)
 	})
 }
@@ -2485,6 +2709,56 @@ func queryIntOrNil(r *http.Request, key string) any {
 	return n
 }
 
+func isSafeMethod(method string) bool {
+	switch method {
+	case http.MethodGet, http.MethodHead, http.MethodOptions:
+		return true
+	default:
+		return false
+	}
+}
+
+func (s *ipRateState) allow(ip string, now time.Time, limit int) (bool, int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Best-effort cleanup of stale clients.
+	cleanupBefore := now.Add(-3 * time.Minute)
+	for k, c := range s.clients {
+		if c.lastSeen.Before(cleanupBefore) {
+			delete(s.clients, k)
+		}
+	}
+
+	c, ok := s.clients[ip]
+	if !ok {
+		s.clients[ip] = &rateClient{
+			count:    1,
+			windowAt: now,
+			lastSeen: now,
+		}
+		return true, 0
+	}
+
+	c.lastSeen = now
+	if now.Sub(c.windowAt) >= time.Minute {
+		c.count = 1
+		c.windowAt = now
+		return true, 0
+	}
+
+	if c.count >= limit {
+		retry := int((time.Minute - now.Sub(c.windowAt)).Seconds())
+		if retry < 1 {
+			retry = 1
+		}
+		return false, retry
+	}
+
+	c.count++
+	return true, 0
+}
+
 func nilIfPtr(v *string) any {
 	if v == nil {
 		return nil
@@ -2528,6 +2802,80 @@ func sanitizeFilename(name string) string {
 		return ""
 	}
 	return base
+}
+
+func generateSecureToken(n int) (string, error) {
+	if n <= 0 {
+		n = 32
+	}
+	b := make([]byte, n)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
+}
+
+func (a *app) setCSRFCookie(w http.ResponseWriter, expiresAt time.Time) {
+	token, err := generateSecureToken(32)
+	if err != nil {
+		return
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     "csrf_token",
+		Value:    token,
+		Path:     "/",
+		HttpOnly: false,
+		Secure:   a.cookieSecure,
+		SameSite: http.SameSiteLaxMode,
+		Expires:  expiresAt,
+	})
+}
+
+func (a *app) clearCSRFCookie(w http.ResponseWriter) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     "csrf_token",
+		Value:    "",
+		Path:     "/",
+		HttpOnly: false,
+		Secure:   a.cookieSecure,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   -1,
+		Expires:  time.Unix(0, 0),
+	})
+}
+
+func normalizeDetectedMIME(v string) string {
+	m := strings.ToLower(strings.TrimSpace(v))
+	if m == "" {
+		return ""
+	}
+	if i := strings.IndexByte(m, ';'); i >= 0 {
+		m = strings.TrimSpace(m[:i])
+	}
+	return m
+}
+
+func isAllowedUploadExtension(ext string) bool {
+	switch strings.ToLower(strings.TrimSpace(ext)) {
+	case ".mp4", ".mov", ".m4v", ".webm":
+		return true
+	default:
+		return false
+	}
+}
+
+func isAllowedUploadMIME(ext, detected string) bool {
+	d := normalizeDetectedMIME(detected)
+	switch strings.ToLower(strings.TrimSpace(ext)) {
+	case ".mp4", ".m4v":
+		return d == "video/mp4"
+	case ".mov":
+		return d == "video/quicktime"
+	case ".webm":
+		return d == "video/webm"
+	default:
+		return false
+	}
 }
 
 func isJSONBoolFalse(raw json.RawMessage) bool {
@@ -2580,6 +2928,30 @@ func envBoolDefault(key string, fallback bool) bool {
 	default:
 		return fallback
 	}
+}
+
+func envIntDefault(key string, fallback int) int {
+	v := strings.TrimSpace(os.Getenv(key))
+	if v == "" {
+		return fallback
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return fallback
+	}
+	return n
+}
+
+func envInt64Default(key string, fallback int64) int64 {
+	v := strings.TrimSpace(os.Getenv(key))
+	if v == "" {
+		return fallback
+	}
+	n, err := strconv.ParseInt(v, 10, 64)
+	if err != nil {
+		return fallback
+	}
+	return n
 }
 
 func clientIP(r *http.Request) string {

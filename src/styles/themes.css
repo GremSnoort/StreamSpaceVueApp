@@ -3,6 +3,7 @@
    ========================= */
 
 :root[data-theme="ocean"] {
+  --muted: #9fcff7;
   --primary: #4f8aff;
   --primary-2: #306dff;
 
@@ -24,6 +25,8 @@
 
   --title-grad-1: #6aa8ff;
   --title-grad-2: #b1d1ff;
+  --text-hero: #cfe8ff;
+  --text-link-accent: #9fd4ff;
 
   --nav-bg: rgba(13, 13, 13, 0.86);
 
@@ -37,6 +40,7 @@
    ========================= */
 
 :root[data-theme="violet"] {
+  --muted: #d8b4fe;
   --primary: #a855f7;
   --primary-2: #7c3aed;
 
@@ -58,6 +62,8 @@
 
   --title-grad-1: #c084fc;
   --title-grad-2: #93c5fd;
+  --text-hero: #ead8ff;
+  --text-link-accent: #e9d5ff;
 
   --nav-bg: rgba(12, 6, 18, 0.86);
 
@@ -71,6 +77,7 @@
    ========================= */
 
 :root[data-theme="sunset"] {
+  --muted: #ffc4a8;
   --primary: #fb7185;     /* rose */
   --primary-2: #f97316;   /* orange */
 
@@ -92,6 +99,8 @@
 
   --title-grad-1: #fb7185;
   --title-grad-2: #fdba74;
+  --text-hero: #ffd7c8;
+  --text-link-accent: #ffd1dc;
 
   --nav-bg: rgba(18, 8, 10, 0.86);
 
@@ -105,6 +114,7 @@
    ========================= */
 
 :root[data-theme="emerald"] {
+  --muted: #bfffea;
   --primary: #34d399;     /* emerald */
   --primary-2: #06b6d4;   /* cyan */
 
@@ -126,6 +136,8 @@
 
   --title-grad-1: #34d399;
   --title-grad-2: #a7f3d0;
+  --text-hero: #d4fff0;
+  --text-link-accent: #bfffea;
 
   --nav-bg: rgba(7, 14, 12, 0.86);
 
@@ -139,6 +151,7 @@
    ========================= */
 
 :root[data-theme="cyber"] {
+  --muted: #b6f7ff;
   --primary: #22d3ee;     /* neon cyan */
   --primary-2: #f472b6;   /* neon pink */
 
@@ -160,6 +173,8 @@
 
   --title-grad-1: #22d3ee;
   --title-grad-2: #f472b6;
+  --text-hero: #c9fbff;
+  --text-link-accent: #b6f7ff;
 
   --nav-bg: rgba(8, 10, 16, 0.86);
 
