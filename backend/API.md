@@ -1,499 +1,416 @@
-# Backend API (MVP) over Fat DB
+# Backend API (REST + RPC) over Fat DB
 
-Этот документ задает рациональный REST-контракт поверх текущей схемы `backend/migrations/*`.
+Актуальный контракт backend API на основе реализации в `backend/cmd/api/main.go`.
+Документ синхронизирован с `backend/README.md`.
 
-## 1. Базовые принципы
+## 1. Принципы
 
-- Бизнес-логика и ACL живут в PostgreSQL функциях.
-- Backend слой: auth/cookie, HTTP-контракты, orchestration нескольких SQL-функций, формат ответов.
-- Все id: UUID.
-- Пагинация: cursor-based там, где уже есть keyset-функции в БД; иначе `limit/offset`.
+- Бизнес-логика и ACL вынесены в PostgreSQL функции (`backend/migrations/*`).
+- HTTP backend отвечает за auth/session, transport-контракты, валидацию и orchestration вызовов SQL-функций.
+- Идентификаторы сущностей: UUID.
+- Пагинация:
+  - cursor-based для follow/folders/comments/reactions/favorites,
+  - `limit/offset` для части списков (videos/feed/purchases).
 
-## 1.1 Security notes
+## 2. Security и middleware
 
-- Browser cookie session:
-  - `session_token` (httpOnly) + `csrf_token` cookie.
-  - Для mutating-методов (`POST/PUT/PATCH/DELETE`) клиент обязан отправлять `X-CSRF-Token` со значением `csrf_token`.
-- CORS: origin должен входить в `CORS_ALLOWED_ORIGINS`.
-- Rate limit: базовый per-IP лимит на уровне HTTP middleware (`RATE_LIMIT_PER_MINUTE`).
+### 2.1 Session token источники
 
-## 2. Auth
+Проверяются в таком порядке:
 
-## POST `/auth/register`
+- `Authorization: Bearer <session_token>`
+- `X-Session-Token: <session_token>`
+- cookie `session_token`
 
-Создать пользователя + сессию.
+### 2.2 CSRF
 
-- body: `{ "email": "...", "username": "...", "password": "..." }`
-- response 201: `{ "user": {...} }`
-- set-cookie: `session_token` (httpOnly)
+Для cookie-сессии mutating методов (`POST/PUT/PATCH/DELETE`) обязателен `X-CSRF-Token`, совпадающий со значением cookie `csrf_token`.
 
-DB:
+- Для token-based запросов (`Authorization` или `X-Session-Token`) CSRF-проверка пропускается.
+- Для `/internal/*` CSRF не применяется.
 
-- `INSERT INTO users ...`
-- `auth_create_session(user_id, user_agent, ip)`
+### 2.3 CORS
 
-Notes:
+`Origin` должен входить в `CORS_ALLOWED_ORIGINS`.
 
-- Проверка пароля делается в backend (hashing).
+### 2.4 Rate limit
 
-## POST `/auth/login`
+Per-IP limit на уровне middleware (`RATE_LIMIT_PER_MINUTE`).
 
-- body: `{ "login": "email_or_username", "password": "..." }`
-- response 200: `{ "user": {...} }`
-- set-cookie: `session_token`
+- Не применяется к `OPTIONS`, `/healthz`, `/internal/*`.
 
-DB:
+### 2.5 Internal auth
 
-- `SELECT users...` + проверка hash в backend
-- `auth_create_session(...)`
+Если задан `INTERNAL_API_TOKEN`, то internal-роуты требуют:
 
-## POST `/auth/logout`
+- `X-Internal-Token: <INTERNAL_API_TOKEN>`
 
-- response 204
+## 3. Форматы ответов и ошибок
 
-DB:
+### 3.1 Ошибка (базовая)
 
-- `auth_delete_session(session_token)`
+```json
+{"error":"message","ok":false}
+```
 
-## GET `/auth/me`
+### 3.2 Ошибка БД
 
-- response 200: `{ "user": {...} }`
-- response 401 если нет валидной сессии
+```json
+{"error":"database error","code":"...","message":"...","ok":false}
+```
 
-DB:
+### 3.3 Базовые HTTP статусы
 
-- `auth_get_user_by_session(session_token)`
+- `200`: успешный GET/POST/PUT/PATCH
+- `201`: создан ресурс
+- `204`: успешное удаление/logout без body
+- `400`: invalid payload / DB business error
+- `401`: unauthorized
+- `403`: forbidden
+- `404`: not found
+- `409`: unique conflict (например `23505`)
+- `429`: rate limit exceeded
+- `500`: internal error
 
-## 3. Users / Follow
+## 4. REST API
 
-## GET `/users/{userId}`
+## 4.1 Health
 
-Публичный профиль пользователя.
+### `GET /healthz`
 
-- response 200: `{ "id", "username", "displayName", "avatarUrl", "bio", "followersCount", "followingCount", "isFollowing" }`
+- response: `200 {"status":"ok"}`
 
-DB:
+## 4.2 Auth
 
-- `user_get_profile(meOrNull, userId)`
+### `POST /auth/register`
 
-## POST `/users/{userId}/follow`
+- body: `{"email","username","password"}`
+- ограничения: `password` минимум 6 символов
+- response: `201 {"user": {...}}`
+- side effects: выставляет cookies `session_token`, `csrf_token`
 
-- response 200: `{ "following": true }`
+### `POST /auth/login`
 
-DB:
+- body: `{"login","password"}` (`login` = email или username)
+- response: `200 {"user": {...}}`
+- side effects: выставляет cookies `session_token`, `csrf_token`
 
-- `follow_create(me, userId)`
+### `POST /auth/logout`
 
-## DELETE `/users/{userId}/follow`
+- response: `204`
+- side effects: чистит cookies `session_token`, `csrf_token`
 
-- response 200: `{ "following": false }`
+### `GET /auth/me`
+### `GET /api/me` (legacy alias)
 
-DB:
+- response: `200` с объектом пользователя напрямую:
 
-- `follow_delete(me, userId)`
+```json
+{
+  "user_id":"...",
+  "email":"...",
+  "username":"...",
+  "display_name":"...",
+  "avatar_url":"...",
+  "is_active":true
+}
+```
 
-## GET `/me/following`
+- response: `401` если сессия невалидна/отсутствует
 
-- query: `limit`, `cursorCreatedAt`, `cursorUserId`
+## 4.3 Users / Follow
 
-DB:
+### `GET /users/{userId}`
 
-- `follow_list_following(me, ...)`
+- публичный профиль
 
-## GET `/me/followers`
+### `POST /users/{userId}/follow` (auth)
 
-- query: `limit`, `cursorCreatedAt`, `cursorUserId`
+- response: `200 {"following": <bool>}`
 
-DB:
+### `DELETE /users/{userId}/follow` (auth)
 
-- `follow_list_followers(me, ...)`
+- response: `200 {"following": false, "deleted": <bool>}`
 
-## 4. Folders
+### `GET /me/following` (auth)
 
-## GET `/me/folders`
+- query: `limit=50`, `cursorCreatedAt`, `cursorUserId`
+- response: `200 {"items":[...]}`
 
-- query: `type=library|favorites`, `parentId`, `limit`, `cursorCreatedAt`, `cursorFolderId`
+### `GET /me/followers` (auth)
 
-DB:
+- query: `limit=50`, `cursorCreatedAt`, `cursorUserId`
+- response: `200 {"items":[...]}`
 
-- `folder_list_children(me, type, parentId, ...)`
+## 4.4 Folders (auth)
 
-## GET `/me/folders/tree`
+### `GET /me/folders`
 
-- query: `type=library|favorites`
+- query: `type=<required>`, `parentId`, `limit=50`, `cursorCreatedAt`, `cursorFolderId`
+- response: `200 {"items":[...]}`
 
-DB:
+### `GET /me/folders/tree`
 
-- `folder_list_tree(me, type)`
+- query: `type=<required>`
+- response: `200 {"items":[...]}`
 
-## GET `/me/folders/{folderId}`
+### `POST /me/folders`
 
-DB:
+- body: `{"type","name","parentId"}`
+- response: `201 {"folderId":"..."}`
 
-- `folder_get(folderId, me)`
+### `GET /me/folders/{folderId}`
 
-## POST `/me/folders`
+- response: `200 {...}`
 
-- body: `{ "type": "library|favorites", "name": "...", "parentId": null|uuid }`
+### `PATCH /me/folders/{folderId}`
 
-DB:
+- body: `{"name"?,"parentId"?}` (минимум одно поле)
+- response: `200 {"ok":true}`
 
-- `folder_create(me, type, parentId, name)`
+### `DELETE /me/folders/{folderId}`
 
-## PATCH `/me/folders/{folderId}`
+- response: `204`
 
-- body: `{ "name"?: "...", "parentId"?: null|uuid }`
+### `GET /me/folders/{folderId}/videos`
 
-DB orchestration:
+- query: `limit=50`, `cursorOrderIndex`, `cursorAddedAt`, `cursorVideoId`
+- response: `200 {"items":[...]}`
 
-- если `name` передан: `folder_rename(folderId, me, name)`
-- если `parentId` передан: `folder_move(folderId, me, parentId)`
+### `POST /me/folders/{folderId}/videos`
 
-## DELETE `/me/folders/{folderId}`
+- body: `{"videoId","orderIndex"?}`
+- response: `200 {"ok":true}`
 
-DB:
+### `DELETE /me/folders/{folderId}/videos/{videoId}`
 
-- `folder_delete(folderId, me)`
+- response: `204`
 
-## GET `/me/folders/{folderId}/videos`
+### `POST /me/folders/{folderId}/videos/{videoId}/move`
 
-- query: `limit`, `cursorOrderIndex`, `cursorAddedAt`, `cursorVideoId`
+- body: `{"toFolderId","toOrderIndex"?}`
+- response: `200 {"moved": <bool>}`
 
-DB:
+## 4.5 Videos
 
-- `folder_list_videos(folderId, me, ...)`
+### `POST /videos/` (auth)
 
-## POST `/me/folders/{folderId}/videos`
+- body: `{"title","description"?,"visibility","folderIds"?}`
+- response: `201 {"videoId":"..."}`
 
-- body: `{ "videoId": "...", "orderIndex"?: int }`
+### `POST /videos/upload` (auth, multipart/form-data)
 
-DB:
+- fields:
+  - `file` (required)
+  - `title` (required)
+  - `description` (optional)
+  - `visibility` (optional, default `private`)
+- лимит body: `UPLOAD_MAX_BYTES` (по умолчанию `512MB`)
+- разрешённые расширения: `.mp4`, `.mov`, `.m4v`, `.webm`
+- разрешённые MIME: `video/mp4`, `video/quicktime`, `video/webm`
+- response: `201 {"videoId":"...","status":"processing"}`
 
-- `folder_add_video(folderId, videoId, me, orderIndex)`
+### `GET /videos/{videoId}`
 
-## DELETE `/me/folders/{folderId}/videos/{videoId}`
+### `PATCH /videos/{videoId}` (auth)
 
-DB:
+- body: `{"title"?,"description"?,"visibility"?}`
+- response: `200 {"ok":true}`
 
-- `folder_remove_video(folderId, videoId, me)`
+### `DELETE /videos/{videoId}` (auth)
 
-## POST `/me/folders/{folderId}/videos/{videoId}/move`
+- response: `204`
 
-- body: `{ "toFolderId": "...", "toOrderIndex"?: int }`
+### `POST /videos/{videoId}/publish` (auth)
 
-DB:
+- response: `200 {"published": <bool>}`
 
-- `folder_move_video(folderId, toFolderId, videoId, me, toOrderIndex)`
+### `POST /videos/{videoId}/unpublish` (auth)
 
-## 5. Videos
+- response: `200 {"unpublished": <bool>}`
 
-## POST `/videos`
+### `GET /me/videos` (auth)
 
-Создать карточку видео (MVP upload init).
+- query: `limit=50`, `offset=0`
+- response: `200 {"items":[...]}`
 
-- body: `{ "title", "description"?, "visibility", "folderIds"?: [uuid] }`
-- response 201: `{ "videoId": "..." }`
+### `GET /users/{userId}/videos`
 
-DB orchestration:
+- query: `limit=50`, `offset=0`
+- response: `200 {"items":[...]}`
 
-- `video_create(me, title, description, visibility, ...)`
-- для каждого `folderId`: `folder_add_video(folderId, videoId, me, null)`
+## 4.6 Playback / Stream
 
-## GET `/videos/{videoId}`
+### `GET /videos/{videoId}/playback`
 
-DB:
+- response: `200`
 
-- `video_get(meOrNull, videoId)`
+```json
+{
+  "type":"hls",
+  "manifestUrl":"/stream/hls/{videoId}/{master}.m3u8",
+  "meta": {...}
+}
+```
 
-## PATCH `/videos/{videoId}`
+### `GET /stream/hls/{videoId}/*`
 
-- body: `{ "title"?, "description"?, "visibility"? }`
+- выдача HLS-манифестов и сегментов из `STORAGE_ROOT`
+- доступ проверяется через DB (`video_get_hls_master_for_viewer`)
 
-DB:
+## 4.7 Reactions
 
-- `video_update_metadata(me, videoId, ...)`
+### `PUT /videos/{videoId}/reaction` (auth)
 
-## POST `/videos/{videoId}/publish`
+- body: `{"value":"like|dislike|none"}`
+- response: `200 {"ok":true}`
 
-DB:
+### `GET /videos/{videoId}/reaction`
 
-- `video_publish(me, videoId)`
+- response: `200 {"myReaction":...,"likes":...,"dislikes":...}`
 
-## POST `/videos/{videoId}/unpublish`
+### `GET /videos/{videoId}/reactions`
 
-DB:
+- query: `value`, `limit=50`, `cursorCreatedAt`, `cursorUserId`
+- response: `200 {"items":[...]}`
 
-- `video_unpublish(me, videoId)`
+## 4.8 Comments
 
-## DELETE `/videos/{videoId}`
+### `GET /videos/{videoId}/comments`
 
-DB:
+- query: `limit=50`, `cursorCreatedAt`, `cursorCommentId`
+- response: `200 {"items":[...]}`
 
-- `video_delete(me, videoId)`
+### `POST /videos/{videoId}/comments` (auth)
 
-## GET `/me/videos`
+- body: `{"text":"..."}`
+- response: `201 {"commentId":"..."}`
 
-- query: `limit`, `offset`
+### `PATCH /videos/{videoId}/comments/{commentId}` (auth)
 
-DB:
+- body: `{"text":"..."}`
+- response: `200 {"ok":true}`
 
-- `video_list_owner(me, limit, offset)`
+### `DELETE /videos/{videoId}/comments/{commentId}` (auth)
 
-## GET `/users/{userId}/videos`
+- response: `204`
 
-- query: `limit`, `offset`
+## 4.9 Favorites (auth)
 
-DB:
+### `GET /me/favorites`
 
-- `video_list_user_visible(meOrNull, userId, limit, offset)`
+- query: `folderId`, `limit=50`, `cursorAddedAt`, `cursorVideoId`
+- response: `200 {"items":[...]}`
 
-## 6. Playback / HLS
+### `GET /me/favorites/all`
 
-## GET `/videos/{videoId}/playback`
+- query: `limit=50`, `cursorAddedAt`, `cursorVideoId`
+- response: `200 {"items":[...]}`
 
-- response 200: `{ "type": "hls", "manifestUrl": "/stream/hls/{videoId}/master.m3u8" }`
+### `PUT /me/favorites/{videoId}`
 
-DB:
+- body: `{"folderId"?,"orderIndex"?}`
+- response: `200 {"saved":true,"folderId":"..."}`
 
-- `video_get_hls_master_for_viewer(meOrNull, videoId)`
+### `DELETE /me/favorites/{videoId}`
 
-## GET `/stream/hls/{videoId}/master.m3u8`
+- query: `folderId`
+- response: `200 {"removedCount": <number>}`
 
-## GET `/stream/hls/{videoId}/variant/{name}.m3u8`
+### `GET /me/favorites/{videoId}`
 
-## GET `/stream/hls/{videoId}/segments/{name}.ts`
+- response: `200 {"saved": <bool>}`
 
-Proxy слой backend со storage reads.
+## 4.10 Purchases / Download
 
-DB checks:
+### `POST /videos/{videoId}/purchase-download` (auth)
 
-- `can_view_video(meOrNull, videoId)`
-- `video_get_hls_master_for_viewer(...)`
-- `video_list_hls_variants_for_viewer(...)`
+- body: `{"provider","providerPaymentId","amountCents","currency"}`
+- response: `201 {"purchaseId":"..."}`
+- note: при `provider="demo"` backend сразу переводит покупку в `paid`
 
-## 7. Reactions
+### `GET /me/purchases` (auth)
 
-## PUT `/videos/{videoId}/reaction`
+- query: `status`, `limit=50`, `offset=0`
+- response: `200 {"items":[...]}`
 
-- body: `{ "value": "like|dislike|none" }`
+### `GET /me/purchases/{purchaseId}` (auth)
 
-DB:
+- response: `200 {...}`
 
-- `like|dislike` -> `video_set_reaction(videoId, me, value)`
-- `none` -> `video_remove_reaction(videoId, me)`
+### `POST /videos/{videoId}/download-token` (auth)
 
-## GET `/videos/{videoId}/reaction`
+- body: `{"purchaseId"?,"ttl"?}`
+- response: `200 {...}` (объект токена)
 
-DB:
-
-- `video_get_user_reaction(videoId, me)`
-- `video_get_social_summary(videoId, meOrNull)`
-
-## GET `/videos/{videoId}/reactions`
-
-- query: `value?`, `limit`, `cursorCreatedAt`, `cursorUserId`
-
-DB:
-
-- `video_list_reactions(videoId, meOrNull, value, ...)`
-
-## 8. Comments
-
-## GET `/videos/{videoId}/comments`
-
-- query: `limit`, `cursorCreatedAt`, `cursorCommentId`
-
-DB:
-
-- `video_list_comments(videoId, meOrNull, false, ...)`
-
-## POST `/videos/{videoId}/comments`
-
-- body: `{ "text": "..." }`
-
-DB:
-
-- `video_add_comment(videoId, me, text)`
-
-## PATCH `/videos/{videoId}/comments/{commentId}`
-
-- body: `{ "text": "..." }`
-
-DB:
-
-- `video_update_comment(commentId, me, text)`
-
-## DELETE `/videos/{videoId}/comments/{commentId}`
-
-DB:
-
-- `video_delete_comment(commentId, me)`
-
-## 9. Favorites shortcuts
-
-## GET `/me/favorites`
-
-- query: `folderId?`, `limit`, `cursorAddedAt`, `cursorVideoId`
-
-DB:
-
-- если `folderId` есть: `folder_list_videos(folderId, me, ...)`
-- иначе: `favorites_list_videos(me, ...)`
-
-## GET `/me/favorites/all`
-
-- query: `limit`, `cursorAddedAt`, `cursorVideoId`
-- purpose: единый список favorites по всему дереву favorites (без N вызовов по папкам)
-
-DB:
-
-- `favorites_list_all(me, limit, cursorAddedAt, cursorVideoId)`
-
-## PUT `/me/favorites/{videoId}`
-
-- body: `{ "folderId"?: uuid, "orderIndex"?: int }`
-
-DB:
-
-- `favorites_add_video(me, videoId, folderIdOrNull, orderIndex)`
-
-## DELETE `/me/favorites/{videoId}`
-
-- query: `folderId?`
-
-DB:
-
-- `favorites_remove_video(me, videoId, folderIdOrNull)`
-
-## GET `/me/favorites/{videoId}`
-
-DB:
-
-- `favorites_is_video_saved(me, videoId)`
-
-## 10. Purchases / Downloads
-
-## POST `/videos/{videoId}/purchase-download`
-
-- body: `{ "provider": "stripe", "providerPaymentId": "...", "amountCents": 100, "currency": "USD" }`
-- note: для локального smoke/demo можно передать `provider: "demo"`; backend сразу ставит покупку в `paid`.
-
-DB:
-
-- `purchase_create(me, videoId, amountCents, currency, provider, providerPaymentId)`
-
-## GET `/me/purchases`
-
-- query: `status?`, `limit`, `offset`
-
-DB:
-
-- `purchase_list_my(me, statusOrNull, limit, offset)`
-
-## GET `/me/purchases/{purchaseId}`
-
-DB:
-
-- `purchase_get(me, purchaseId)`
-
-## POST `/purchases/{purchaseId}/status`
-
-(обычно webhook/internal)
-
-- body: `{ "status": "pending|paid|failed|refunded|canceled" }`
-
-DB:
-
-- `purchase_set_status(purchaseId, status)`
-
-## POST `/videos/{videoId}/download-token`
-
-- body: `{ "purchaseId"?: uuid, "ttl"?: "15 minutes" }`
-
-DB:
-
-- `download_token_issue(me, videoId, purchaseIdOrNull, ttl)`
-
-## GET `/videos/{videoId}/download`
+### `GET /videos/{videoId}/download` (auth)
 
 - query:
-  - `token=...` (one-time flow)
-  - `mode=file` (вернуть файл как attachment; без `mode=file` возвращается JSON c `sourceKey`)
+  - `token` (optional one-time token)
+  - `mode=file` (если нужен сразу файл)
+- поведение:
+  - без `mode=file` -> `200 {"sourceKey":"...","downloadUrl":"...","downloadMode":"file"}`
+  - с `mode=file` -> file attachment
 
-DB orchestration:
+### `POST /purchases/{purchaseId}/status` (internal token)
 
-- `download_token_consume(token)`
-- `video_get_download_source_for_user(me, videoId)`
+- body: `{"status":"..."}`
+- response: `200 {"ok":true}`
 
-## 11. Feed
+## 4.11 Feed
 
-## GET `/feed/following`
+### `GET /feed/following` (auth)
 
-- query: `limit`, `offset`
+- query: `limit=50`, `offset=0`
+- response: `200 {"items":[...]}`
 
-DB:
+### `GET /feed/hot`
 
-- `feed_following(me, limit, offset)`
+- query: `limit=50`, `offset=0`, `window=48 hours`
+- response: `200 {"items":[...]}`
 
-## GET `/feed/hot`
+### `GET /feed`
 
-- query: `limit`, `offset`, `window` (например `48 hours`)
+- query: `limit=50`, `offset=0`, `window=48 hours`
+- response: `200 {"items":[...]}`
+- backend объединяет `following` + `hot` и добавляет поле `source`.
 
-DB:
+## 4.12 Internal transcoding
 
-- `feed_hot(meOrNull, limit, offset, window)`
+Все эндпоинты ниже требуют internal token (если `INTERNAL_API_TOKEN` задан).
 
-## GET `/feed`
+### `POST /internal/transcode/enqueue`
 
-Комбинированная лента.
+- body: `{"videoId":"...","priority"?}`
+- response: `200 {"jobId":"..."}`
 
-Backend orchestration:
+### `POST /internal/transcode/claim`
 
-- `feed_following(...)`
-- `feed_hot(...)`
-- merge/interleave policy в приложении
+- body: `{"workerId":"..."}`
+- response:
+  - `200 {"job": null}` если задач нет
+  - `200 {"job": {...}}` если задача выдана
 
-## 12. Internal (worker/transcoding)
+### `POST /internal/transcode/finish`
 
-## POST `/internal/transcode/enqueue`
+- body: `{"jobId","status","errorMessage"?,"hlsMasterKey"?,"posterKey"?}`
+- response: `200 {"ok":true}`
 
-- body: `{ "videoId": "...", "priority"?: 100 }`
+### `POST /internal/transcode/assets`
 
-DB:
+- body: `{"videoId","durationSeconds"?,"width"?,"height"?,"sourceSizeBytes"?,"variants"?,"hlsMasterKey"?,"posterKey"?}`
+- response: `200 {"ok":true}`
 
-- `transcode_enqueue(videoId, priority)`
+## 5. RPC API (coexists with REST)
 
-## POST `/internal/transcode/claim`
+### `POST /api/v1/rpc/{function}`
 
-- body: `{ "workerId": "..." }`
+- body: `{"args":[...]}`
+- backend вызывает только whitelist из `buildFunctionRegistry()`
+- для части функций `user_id` инжектится сервером в заданный аргумент
 
-DB:
+## 6. References
 
-- `transcode_claim_next(workerId)`
-
-## POST `/internal/transcode/finish`
-
-- body: `{ "jobId", "status", "errorMessage"?, "hlsMasterKey"?, "posterKey"? }`
-
-DB:
-
-- `transcode_finish(...)`
-
-## POST `/internal/transcode/assets`
-
-- body: `{ "videoId", "durationSeconds"?, "width"?, "height"?, "variants"?: [...] }`
-
-DB orchestration:
-
-- `transcode_set_video_media_info(...)`
-- `transcode_replace_hls_variants(...)` или `transcode_add_hls_variant(...)`
-- `transcode_finalize_video(...)` когда master готов
-
-## 13. Error model
-
-- `400`: invalid payload / DB business error (`RAISE EXCEPTION`)
-- `401`: missing/invalid session
-- `403`: forbidden by policy
-- `404`: not found
-- `409`: conflict (optional mapping from DB unique violations)
-- `500`: unexpected error
+- `backend/README.md`
+- `backend/cmd/api/main.go`
+- `backend/migrations/`
