@@ -78,5 +78,8 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f backend/migrations/168_favorites_list
 ```
 
 ```bash
-while IFS= read -r line; do echo "=====================================> cat $line"; cat backend/migrations/$line; done <<< $(ls -la backend/migrations/ | awk '{print $9}')
+find backend/migrations -maxdepth 1 -type f -name '*.sql' | sort | while IFS= read -r file; do
+  echo "=====================================> cat $file"
+  cat "$file"
+done
 ```
