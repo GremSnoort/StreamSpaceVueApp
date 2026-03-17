@@ -35,6 +35,7 @@
             <button class="btn btn-primary" @click="openQuickUpload(group)">Upload here</button>
             <button class="btn btn-secondary" @click="openCreateFolder(group)">Create folder</button>
             <button class="btn btn-secondary" @click="openFolderUpdate(group)">Update</button>
+            <button class="btn btn-danger" :disabled="folderBusy" @click="deleteFolderDirect(group)">Delete folder</button>
           </div>
         </header>
 
@@ -721,21 +722,28 @@ async function moveFolder() {
   }
 }
 
-async function deleteFolder() {
-  const folder = folderModal.value.folder
+async function deleteFolderByEntity(folder, { closeModal = false } = {}) {
   if (!folder) return
   if (!confirm(`Delete folder "${folder.name}"?`)) return
   folderBusy.value = true
   errorText.value = ''
   try {
     await foldersService.deleteFolder(folder.id)
-    closeFolderModal()
+    if (closeModal) closeFolderModal()
     await loadVideos()
   } catch (err) {
     errorText.value = err?.response?.data?.message || 'Delete folder failed'
   } finally {
     folderBusy.value = false
   }
+}
+
+async function deleteFolder() {
+  await deleteFolderByEntity(folderModal.value.folder, { closeModal: true })
+}
+
+async function deleteFolderDirect(folder) {
+  await deleteFolderByEntity(folder)
 }
 
 async function addVideoToFolder() {
